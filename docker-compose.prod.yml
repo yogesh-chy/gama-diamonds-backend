@@ -1,0 +1,26 @@
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+#
+# This is for testing a production-like setup locally or as a starting
+# point for a self-managed host. For the actual deployment target, prefer
+# a managed platform (Render/Railway/Fly/DO App Platform) with their
+# managed Postgres — see README "Deployment" section for why.
+
+services:
+  db:
+    ports: []  # don't expose Postgres to the host in a prod-like run
+
+  redis:
+    ports: []  # don't expose Redis to the host in a prod-like run either
+
+  web:
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    volumes: []  # no bind-mount — run the image as built, not live-reloaded code
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-jewelry_store}
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      # In a real deployment, point this at a managed Redis instance
+      # instead (Render/Railway/DO/Upstash) rather than the local
+      # single-container `redis` service used here for a prod-like test.
+      REDIS_URL: redis://redis:6379/0

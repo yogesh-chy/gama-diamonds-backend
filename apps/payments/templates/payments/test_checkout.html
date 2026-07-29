@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Razorpay Test Checkout — DEV ONLY</title>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.3rem; }
+  section { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  section h2 { font-size: 1rem; margin-top: 0; }
+  input { display: block; width: 100%; box-sizing: border-box; padding: 0.5rem; margin: 0.3rem 0; font-size: 0.9rem; }
+  button { padding: 0.5rem 0.9rem; margin: 0.3rem 0.3rem 0.3rem 0; font-size: 0.9rem; cursor: pointer; }
+  .product { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+  pre { background: #f6f6f6; padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; white-space: pre-wrap; }
+  .warn { background: #fff4e5; border: 1px solid #f0c36d; padding: 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem; }
+  .status { font-size: 0.85rem; color: #555; margin-top: 0.4rem; }
+</style>
+</head>
+<body>
+
+  <div class="warn">
+    <strong>Dev tool only</strong> — this page only exists when DEBUG=True
+    (config/settings/dev.py); it's absent entirely from config/settings/prod.py.
+    It talks to this same Django server directly via same-origin fetch calls,
+    so <strong>ngrok is NOT required</strong> to use it. You only need ngrok
+    if you separately want to test the webhook (the backup confirmation path).
+  </div>
+
+  <h1>Razorpay Test Checkout</h1>
+
+  <section>
+    <h2>1. Log in</h2>
+    <input id="email" placeholder="email" value="test@example.com">
+    <input id="password" placeholder="password" type="password" value="StrongPass123!">
+    <button onclick="login()">Log in</button>
+    <button onclick="register()">Register this account first</button>
+    <div id="login-status" class="status"></div>
+  </section>
+
+  <section id="address-section" style="display:none">
+    <h2>2. Address</h2>
+    <div id="address-list"></div>
+    <button onclick="createTestAddress()">Create a test address</button>
+    <div id="address-status" class="status"></div>
+  </section>
+
+  <section id="products-section" style="display:none">
+    <h2>3. Products — click to add to cart</h2>
+    <div id="product-list">Loading…</div>
+  </section>
+
+  <section id="cart-section" style="display:none">
+    <h2>4. Cart</h2>
+    <pre id="cart-json"></pre>
+    <button onclick="checkout()">Checkout &amp; Pay</button>
+  </section>
+
+  <section id="result-section" style="display:none">
+    <h2>5. Result</h2>
+    <pre id="result-json"></pre>
+  </section>
+
+<script>
+let accessToken = null;
+let selectedAddressId = null;
+
+async function api(path, options = {}) {
+  const headers = options.headers || {};
+  headers["Content-Type"] = "application/json";
+  if (accessToken) headers["Authorization"] = "Bearer " + accessToken;
+  const response = await fetch(path, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw { status: response.status, data };
+  return data;
+}
+
+async function register() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  try {
+    await api("/api/auth/register/", {
+      method: "POST",
+      body: JSON.stringify({ email, password, password_confirm: password }),
+    });
+    document.getElementById("login-status").textContent = "Registered — now click 'Log in'.";
+  } catch (e) {
+    document.getElementById("login-status").textContent =
+      "Register failed (maybe it already exists?): " + JSON.stringify(e.data);
+  }
+}
+
+async function login() {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  try {
+    const data = await api("/api/auth/login/", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    accessToken = data.access;
+    document.getElementById("login-status").textContent =
+      "Logged in as " + data.user.email + " (is_staff=" + data.user.is_staff + ")";
+    document.getElementById("address-section").style.display = "block";
+    document.getElementById("products-section").style.display = "block";
+    loadAddresses();
+    loadProducts();
+  } catch (e) {
+    document.getElementById("login-status").textContent =
+      "Login failed — click 'Register this account first', then log in.";
+  }
+}
+
+async function loadAddresses() {
+  const data = await api("/api/auth/addresses/");
+  const results = data.results || data;
+  const list = document.getElementById("address-list");
+  list.innerHTML = "";
+  results.forEach((addr) => {
+    const btn = document.createElement("button");
+    btn.textContent = addr.full_name + " — " + addr.city;
+    btn.onclick = () => {
+      selectedAddressId = addr.id;
+      document.getElementById("address-status").textContent = "Selected address #" + addr.id;
+    };
+    list.appendChild(btn);
+  });
+  if (results.length) {
+    selectedAddressId = results[0].id;
+    document.getElementById("address-status").textContent = "Using address #" + selectedAddressId;
+  }
+}
+
+async function createTestAddress() {
+  const addr = await api("/api/auth/addresses/", {
+    method: "POST",
+    body: JSON.stringify({
+      full_name: "Test Buyer", phone_number: "+919812345678",
+      street_address: "123 MG Road", city: "Pune", state: "Maharashtra",
+      postal_code: "411001", country: "India", is_default: true,
+    }),
+  });
+  selectedAddressId = addr.id;
+  loadAddresses();
+}
+
+async function loadProducts() {
+  const data = await api("/api/products/");
+  const results = data.results || data;
+  const list = document.getElementById("product-list");
+  list.innerHTML = "";
+  if (!results.length) {
+    list.textContent = "No products yet — run the seed_products management command first.";
+    return;
+  }
+  results.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "product";
+    row.innerHTML = "<span>" + p.name + " — ₹" + p.basePrice + "</span>";
+    const btn = document.createElement("button");
+    btn.textContent = "Add to cart";
+    btn.onclick = () => addToCart(p.id);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+async function addToCart(productId) {
+  try {
+    const cart = await api("/api/orders/cart/items/", {
+      method: "POST",
+      body: JSON.stringify({ product_id: productId, quantity: 1 }),
+    });
+    showCart(cart);
+  } catch (e) {
+    alert("Couldn't add to cart: " + JSON.stringify(e.data));
+  }
+}
+
+function showCart(cart) {
+  document.getElementById("cart-section").style.display = "block";
+  document.getElementById("cart-json").textContent = JSON.stringify(cart, null, 2);
+}
+
+async function checkout() {
+  if (!selectedAddressId) { alert("Create/select an address first."); return; }
+
+  let checkoutData;
+  try {
+    checkoutData = await api("/api/orders/checkout/", {
+      method: "POST",
+      body: JSON.stringify({ address_id: selectedAddressId }),
+    });
+  } catch (e) {
+    alert("Checkout failed: " + JSON.stringify(e.data));
+    return;
+  }
+
+  const order = checkoutData.order;
+  const razorpayInfo = checkoutData.razorpay;
+
+  const rzp = new Razorpay({
+    key: razorpayInfo.key_id,
+    amount: razorpayInfo.amount,
+    currency: razorpayInfo.currency,
+    order_id: razorpayInfo.razorpay_order_id,
+    name: "Test Store (dev)",
+    description: "Order #" + order.id,
+    handler: async function (response) {
+      // This is exactly what your real Next.js frontend will do too:
+      // send Razorpay's callback straight to /api/payments/verify/.
+      try {
+        const verified = await api("/api/payments/verify/", {
+          method: "POST",
+          body: JSON.stringify({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          }),
+        });
+        showResult(verified);
+      } catch (e) {
+        showResult(e.data || e);
+      }
+    },
+    modal: {
+      ondismiss: function () {
+        showResult({
+          note: "Checkout widget closed without completing payment. " +
+                "Order stays pending_payment/reserved until the reservation window lapses.",
+        });
+      },
+    },
+    theme: { color: "#1a1a1a" },
+  });
+
+  rzp.open();
+}
+
+function showResult(data) {
+  document.getElementById("result-section").style.display = "block";
+  document.getElementById("result-json").textContent = JSON.stringify(data, null, 2);
+}
+</script>
+</body>
+</html>
