@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AdminCartViewSet,
     CartItemDetailView,
     CartItemListCreateView,
     CartView,
@@ -12,6 +13,7 @@ from .views import (
 app_name = "orders"
 
 router = DefaultRouter()
+router.register("admin/carts", AdminCartViewSet, basename="admin-cart")
 router.register("", OrderViewSet, basename="order")
 
 urlpatterns = [
@@ -21,3 +23,4 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("", include(router.urls)),
 ]
+

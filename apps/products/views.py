@@ -146,33 +146,55 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated(), IsAdminUser()]
 
 
-class StyleViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public, read-only — powers the "Shop by Style" filter menu."""
+class SubcategoryViewSet(viewsets.ModelViewSet):
+    queryset = Subcategory.objects.all().select_related("category")
+    serializer_class = SubcategorySerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated(), IsAdminUser()]
+
+
+class StyleViewSet(viewsets.ModelViewSet):
     queryset = Style.objects.all()
     serializer_class = StyleSerializer
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated(), IsAdminUser()]
 
 
-class DiamondTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public, read-only — powers "Select Diamond Type"."""
+class DiamondTypeViewSet(viewsets.ModelViewSet):
     queryset = DiamondType.objects.all()
     serializer_class = DiamondTypeSerializer
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated(), IsAdminUser()]
 
 
-class BrandViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public, read-only — powers the "Brands" nav section."""
+class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated(), IsAdminUser()]
 
 
-class CollectionViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public, read-only — powers curated pages like New Arrivals, Next
-    Day Delivery, and The Classics."""
+class CollectionViewSet(viewsets.ModelViewSet):
     queryset = Collection.objects.all()
     serializer_class = CollectionSerializer
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated(), IsAdminUser()]
+
 
 
 class SubcategoriesView(APIView):

@@ -117,13 +117,64 @@ class CheckoutView(generics.GenericAPIView):
         )
 
 
-class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+from core.permissions import IsAdminUser
+from django.db.models import Q
+from .models import Cart, CartItem, Order
+from .serializers import (
+    AddCartItemSerializer,
+    AdminCartSerializer,
+    CartSerializer,
+    CheckoutSerializer,
+    OrderSerializer,
+    UpdateCartItemSerializer,
+)
+
+
+class OrderViewSet(viewsets.ModelViewSet):
     """
-    GET /api/orders/ and /api/orders/{id}/ — a shopper's own order history.
-    Read-only: status transitions are admin-only, done via Django Admin.
+    GET /api/orders/ and /api/orders/{id}/ — shopper's own history or all orders for staff.
+    PATCH /api/orders/{id}/ — status transitions by staff.
     """
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        if self.action in ("update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).prefetch_related("items")
+        user = self.request.user
+        if user.is_staff:
+            qs = Order.objects.all().prefetch_related("items").select_related("user")
+            status_param = self.request.query_params.get("status")
+            if status_param:
+                qs = qs.filter(status__iexact=status_param)
+            search = self.request.query_params.get("search")
+            if search:
+                qs = qs.filter(
+                    Q(id__icontains=search) |
+                    Q(user__email__icontains=search) |
+                    Q(address_full_name__icontains=search) |
+                    Q(razorpay_order_id__icontains=search)
+                )
+            return qs
+        return Order.objects.filter(user=user).prefetch_related("items")
+
+
+class AdminCartViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/orders/admin/carts/ — lists all customer shopping carts for staff.
+    """
+    serializer_class = AdminCartSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    queryset = Cart.objects.prefetch_related("items__product__images", "items__product", "user").all()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Filter out empty carts by default or support search
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(user__email__icontains=search)
+        return qs
+

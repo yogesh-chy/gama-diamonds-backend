@@ -75,6 +75,36 @@ class VerifyOTPView(APIView):
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
+class AdminLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email", "").strip().lower()
+        password = request.data.get("password", "")
+
+        if not email or not password:
+            return Response(
+                {"detail": "Both email and password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user or not user.check_password(password):
+            return Response(
+                {"detail": "Invalid credentials. Please check your email and password."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not user.is_staff and not user.is_superuser:
+            return Response(
+                {"detail": "Access denied. Admin privileges required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        data = _tokens_for_user(user)
+        return Response(data, status=status.HTTP_200_OK)
+
+
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -115,5 +145,30 @@ class AddressViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Address.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+from core.permissions import IsAdminUser
+from django.db.models import Count, Q
+from .serializers import (
+    AddressSerializer,
+    AdminUserSerializer,
+    LogoutSerializer,
+    OTPRequestSerializer,
+    OTPVerifySerializer,
+    UserSerializer,
+)
+
+
+class AdminUserViewSet(viewsets.ModelViewSet):
+    """
+    /api/auth/admin/users/ — view & manage users for admin.
+    """
+    serializer_class = AdminUserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    queryset = User.objects.all().annotate(orders_count=Count("orders")).order_by("-created_at")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(Q(email__icontains=search) | Q(phone_number__icontains=search))
+        return qs
+

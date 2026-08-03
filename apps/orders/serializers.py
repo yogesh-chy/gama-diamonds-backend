@@ -48,6 +48,18 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ("id", "items", "total_amount", "total_items", "updated_at")
 
 
+class AdminCartSerializer(serializers.ModelSerializer):
+    items = CartItemSerializer(many=True, read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    total_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_items = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Cart
+        fields = ("id", "user_id", "user_email", "items", "total_amount", "total_items", "created_at", "updated_at")
+
+
 class CheckoutSerializer(serializers.Serializer):
     address_id = serializers.IntegerField()
 
@@ -62,13 +74,21 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
 
     class Meta:
         model = Order
         fields = (
-            "id", "status", "subtotal", "tax_amount", "total_amount",
+            "id", "user_id", "user_email", "status", "subtotal", "tax_amount", "total_amount",
             "address_full_name", "address_phone_number", "address_street",
             "address_city", "address_state", "address_postal_code", "address_country",
             "razorpay_order_id", "reservation_expires_at", "items", "created_at", "updated_at",
         )
-        read_only_fields = fields
+        read_only_fields = (
+            "id", "user_id", "user_email", "subtotal", "tax_amount", "total_amount",
+            "address_full_name", "address_phone_number", "address_street",
+            "address_city", "address_state", "address_postal_code", "address_country",
+            "razorpay_order_id", "reservation_expires_at", "items", "created_at", "updated_at",
+        )
+

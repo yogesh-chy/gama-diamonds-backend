@@ -15,6 +15,19 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "email", "is_staff", "is_email_verified", "created_at")
 
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    orders_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "email", "phone_number", "is_staff", "is_email_verified", "created_at", "orders_count")
+        read_only_fields = ("id", "email", "created_at")
+
+    def get_orders_count(self, obj):
+        return getattr(obj, "orders_count", obj.orders.count())
+
+
+
 class OTPRequestSerializer(serializers.Serializer):
     """POST /api/auth/otp/request/ — the only input needed to start login."""
 

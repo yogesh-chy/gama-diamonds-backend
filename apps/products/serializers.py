@@ -29,9 +29,12 @@ class ProductSizeSerializer(serializers.ModelSerializer):
 
 
 class SubcategorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source="category.name", read_only=True)
+
     class Meta:
         model = Subcategory
-        fields = ["id", "name", "slug"]
+        fields = ["id", "category", "category_name", "name", "slug", "created_at"]
+        extra_kwargs = {"slug": {"required": False, "allow_blank": True}}
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -39,7 +42,9 @@ class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = ["id", "name", "slug", "subcategories"]
+        fields = ["id", "name", "slug", "description", "subcategories", "created_at"]
+        extra_kwargs = {"slug": {"required": False, "allow_blank": True}}
+
 
 
 class StyleSerializer(serializers.ModelSerializer):
