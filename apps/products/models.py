@@ -241,6 +241,8 @@ class Product(models.Model):
     gender = models.CharField(max_length=20, choices=[("women", "Women"), ("men", "Men"), ("unisex", "Unisex")], default="women")
     occasion = models.CharField(max_length=100, blank=True, default="")
 
+    video_url = models.CharField(max_length=1000, blank=True, default="")
+
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

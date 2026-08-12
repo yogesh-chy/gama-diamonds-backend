@@ -1,5 +1,11 @@
+import os
+import uuid
+import cloudinary
+import cloudinary.uploader
+from django.conf import settings
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
@@ -14,6 +20,84 @@ from .serializers import (
     StyleSerializer,
     SubcategorySerializer,
 )
+
+
+class MediaUploadView(APIView):
+    permission_classes = [permissions.AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, format=None):
+        file_obj = request.FILES.get('file') or request.FILES.get('image') or request.FILES.get('video')
+        if not file_obj:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = os.path.splitext(file_obj.name)[1]
+        is_video = ext.lower() in ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.ogv']
+
+        cloud_name = getattr(settings, "CLOUDINARY_CLOUD_NAME", "")
+        api_key = getattr(settings, "CLOUDINARY_API_KEY", "")
+        api_secret = getattr(settings, "CLOUDINARY_API_SECRET", "")
+        cloudinary_url = getattr(settings, "CLOUDINARY_URL", "")
+
+        has_cloudinary = bool(cloudinary_url or (cloud_name and api_key and api_secret))
+
+        if has_cloudinary:
+            try:
+                if cloudinary_url:
+                    cloudinary.config(cloudinary_url=cloudinary_url)
+                else:
+                    cloudinary.config(
+                        cloud_name=cloud_name,
+                        api_key=api_key,
+                        api_secret=api_secret,
+                        secure=True,
+                    )
+
+                resource_type = "video" if is_video else "auto"
+                result = cloudinary.uploader.upload(
+                    file_obj,
+                    resource_type=resource_type,
+                    folder="gama_diamonds",
+                )
+                media_url = result.get("secure_url") or result.get("url")
+                res_type = result.get("resource_type", "")
+                if res_type == "video":
+                    is_video = True
+
+                return Response({
+                    "success": True,
+                    "url": media_url,
+                    "public_id": result.get("public_id", ""),
+                    "filename": file_obj.name,
+                    "media_type": "video" if is_video else "image"
+                }, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                # Cloudinary failed — fall back to local disk storage
+                pass
+
+        # Fallback: Local disk storage
+        upload_dir = os.path.join(settings.MEDIA_ROOT, "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        unique_name = f"{uuid.uuid4().hex[:10]}{ext}"
+        file_path = os.path.join(upload_dir, unique_name)
+
+        with open(file_path, 'wb+') as destination:
+            for chunk in file_obj.chunks():
+                destination.write(chunk)
+
+        media_url = f"{settings.MEDIA_URL.rstrip('/')}/uploads/{unique_name}"
+        if not media_url.startswith('/'):
+            media_url = '/' + media_url
+
+        return Response({
+            "success": True,
+            "url": media_url,
+            "filename": file_obj.name,
+            "media_type": "video" if is_video else "image"
+        }, status=status.HTTP_201_CREATED)
+
+
 
 
 class ProductViewSet(viewsets.ModelViewSet):

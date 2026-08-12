@@ -102,7 +102,16 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# ---------------------------------------------------------------------------
+# Cloudinary Configuration
+# ---------------------------------------------------------------------------
+CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME", default="")
+CLOUDINARY_API_KEY = env("CLOUDINARY_API_KEY", default="")
+CLOUDINARY_API_SECRET = env("CLOUDINARY_API_SECRET", default="")
+CLOUDINARY_URL = env("CLOUDINARY_URL", default="")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 
 # ---------------------------------------------------------------------------
 # Django REST Framework

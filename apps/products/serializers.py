@@ -125,6 +125,7 @@ class ProductSerializer(serializers.ModelSerializer):
     bandFit = serializers.CharField(source="band_fit", required=False, allow_null=True, allow_blank=True)
     customisationAvailable = serializers.CharField(source="customisation_available", required=False)
     engravingAvailable = serializers.CharField(source="engraving_available", required=False)
+    videoUrl = serializers.CharField(source="video_url", required=False, allow_blank=True, allow_null=True)
 
     # Structural pricing and inventory helpers for legacy frontend components
     pricing = serializers.SerializerMethodField()
@@ -177,6 +178,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "engravingAvailable",
             "gender",
             "occasion",
+            "video_url",
+            "videoUrl",
             "is_active",
             "isActive",
             "is_featured",
