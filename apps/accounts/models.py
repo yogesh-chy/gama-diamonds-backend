@@ -54,9 +54,8 @@ class Address(models.Model):
         return f"{self.full_name} — {self.city} ({self.user.email})"
 
     def save(self, *args, **kwargs):
-
-        if self.is_default:
-            Address.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(
+        if self.is_default and getattr(self, "user_id", None):
+            Address.objects.filter(user_id=self.user_id, is_default=True).exclude(pk=self.pk).update(
                 is_default=False
             )
         super().save(*args, **kwargs)

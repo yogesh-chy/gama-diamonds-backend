@@ -159,6 +159,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     Q(razorpay_order_id__icontains=search)
                 )
             return qs
+        # Shoppers see all their own orders
         return Order.objects.filter(user=user).prefetch_related("items")
 
 

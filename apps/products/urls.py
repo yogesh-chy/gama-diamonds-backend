@@ -5,6 +5,7 @@ from .views import (
     CategoryViewSet,
     CollectionViewSet,
     DiamondTypeViewSet,
+    FacetedFiltersView,
     MediaUploadView,
     ProductViewSet,
     StyleViewSet,
@@ -26,6 +27,7 @@ router.register(r"", ProductViewSet, basename="product")
 urlpatterns = [
     path("upload/", MediaUploadView.as_view(), name="media-upload"),
     path("subcategories/summary/", SubcategoriesView.as_view(), name="subcategories-summary"),
+    path("filters/", FacetedFiltersView.as_view(), name="product-filters"),
     path("", include(router.urls)),
 ]
 

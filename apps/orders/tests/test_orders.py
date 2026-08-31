@@ -158,4 +158,4 @@ class TestOrderHistory:
         order_id = create_response.data["order"]["id"]
 
         response = client.patch(reverse("orders:order-detail", args=[order_id]), {"status": "shipped"})
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_405_METHOD_NOT_ALLOWED)

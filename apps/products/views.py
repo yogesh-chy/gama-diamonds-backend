@@ -100,23 +100,64 @@ class MediaUploadView(APIView):
 
 
 
+from django.db.models import Min, Max
+from .models import Brand, Category, Collection, DiamondType, Product, ProductVariant, Style, Subcategory
+from .serializers import (
+    BrandSerializer,
+    CategorySerializer,
+    CollectionSerializer,
+    DiamondTypeSerializer,
+    ProductImageSerializer,
+    ProductListSerializer,
+    ProductSerializer,
+    ProductVariantSerializer,
+    StyleSerializer,
+    SubcategorySerializer,
+)
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().prefetch_related(
-        "images", "sizes", "styles", "collections", "diamond_spec"
-    ).select_related("diamond_type", "brand")
+        "images", "variants", "variants__images", "sizes", "styles", "collections", "diamond_spec"
+    ).select_related("diamond_type", "brand", "category_ref", "subcategory_ref")
     serializer_class = ProductSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve"):
+        if self.action in ("list", "retrieve", "resolve_variant"):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated(), IsAdminUser()]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ProductListSerializer
+        return ProductSerializer
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        val = self.kwargs[lookup_url_kwarg]
+
+        if val.isdigit():
+            obj = queryset.filter(pk=val).first()
+        else:
+            obj = queryset.filter(slug__iexact=val).first()
+
+        if not obj:
+            from rest_framework.exceptions import NotFound
+            raise NotFound(detail="Product not found.")
+
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_queryset(self):
         qs = super().get_queryset()
 
         category = self.request.query_params.get("category")
         if category:
-            qs = qs.filter(category__iexact=category)
+          if category.lower() in ["rings", "ring"]:
+            qs = qs.filter(Q(category__icontains="ring") | Q(category_ref__slug__icontains="ring"))
+          else:
+            qs = qs.filter(Q(category__iexact=category) | Q(category_ref__slug__iexact=category))
 
         status_param = self.request.query_params.get("status")
         if status_param == "active":
@@ -128,16 +169,29 @@ class ProductViewSet(viewsets.ModelViewSet):
         if featured == "true":
             qs = qs.filter(is_featured=True)
 
-        # "Shop by Shape" — diamond_cut already covers this (round, oval,
-        # pear, etc.) so no new model was needed for it.
-        shape = self.request.query_params.get("shape")
+        shape = self.request.query_params.get("shape") or self.request.query_params.get("diamond_cut") or self.request.query_params.get("diamond_shape")
         if shape:
-            qs = qs.filter(diamond_cut__iexact=shape)
+            s_clean = shape.lower().replace("-cut", "").replace("-brilliant", "").replace("-shape", "").strip()
+            qs = qs.filter(Q(diamond_cut__iexact=shape) | Q(diamond_cut__iexact=s_clean) | Q(diamond_cut__icontains=s_clean) | Q(name__icontains=s_clean))
 
-        # "Shop by Style" — many-to-many, a product can match more than one.
         style = self.request.query_params.get("style")
         if style:
-            qs = qs.filter(styles__slug__iexact=style)
+            s_lower = style.lower().strip()
+            style_q = Q(styles__slug__iexact=style) | Q(subcategory_ref__slug__iexact=style) | Q(subcategory_ref__name__icontains=style)
+            if s_lower in ["three-stone", "trilogy", "triology"]:
+                style_q |= Q(subcategory_ref__name__icontains="triology") | Q(subcategory_ref__name__icontains="trilogy") | Q(subcategory_ref__name__icontains="three") | Q(name__icontains="trilogy") | Q(name__icontains="three stone")
+            elif s_lower in ["diamond-shoulder", "shoulder"]:
+                style_q |= Q(subcategory_ref__name__icontains="shoulder") | Q(name__icontains="shoulder")
+            elif s_lower in ["under-halo"]:
+                style_q |= Q(subcategory_ref__name__icontains="under halo") | Q(name__icontains="under halo")
+            elif s_lower in ["halo"]:
+                style_q |= Q(subcategory_ref__name__iexact="halo") | Q(name__icontains="halo")
+            elif s_lower in ["solitaire"]:
+                style_q |= Q(subcategory_ref__name__iexact="solitaire") | Q(name__icontains="solitaire")
+            else:
+                s_clean = s_lower.replace("-", " ")
+                style_q |= Q(subcategory_ref__name__icontains=s_clean) | Q(name__icontains=s_clean)
+            qs = qs.filter(style_q)
 
         diamond_type = self.request.query_params.get("diamond_type")
         if diamond_type:
@@ -151,16 +205,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         if collection:
             qs = qs.filter(collections__slug__iexact=collection)
 
-        metal_type = self.request.query_params.get("metal_type")
-        if metal_type:
-            qs = qs.filter(metal_type__iexact=metal_type)
+        metal = self.request.query_params.get("metal") or self.request.query_params.get("metal_type")
+        if metal:
+            qs = qs.filter(Q(metal_type__iexact=metal) | Q(variants__metal_type__iexact=metal))
 
-        price_min = self.request.query_params.get("price_min")
+        karat = self.request.query_params.get("karat") or self.request.query_params.get("metal_karat")
+        if karat:
+            qs = qs.filter(Q(metal_karat__iexact=karat) | Q(variants__metal_karat__iexact=karat))
+
+        price_min = self.request.query_params.get("price_min") or self.request.query_params.get("min_price")
         if price_min:
-            qs = qs.filter(base_price__gte=price_min)
-        price_max = self.request.query_params.get("price_max")
+            qs = qs.filter(Q(base_price__gte=price_min) | Q(variants__price__gte=price_min))
+
+        price_max = self.request.query_params.get("price_max") or self.request.query_params.get("max_price")
         if price_max:
-            qs = qs.filter(base_price__lte=price_max)
+            qs = qs.filter(Q(base_price__lte=price_max) | Q(variants__price__lte=price_max))
+
+        availability = self.request.query_params.get("availability")
+        if availability in ("in_stock", "true", "yes"):
+            qs = qs.filter(Q(total_stock__gt=0) | Q(variants__stock__gt=0))
 
         subcategory = self.request.query_params.get("subcategory")
         if subcategory:
@@ -169,7 +232,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 Q(earring_type__iexact=subcategory) |
                 Q(necklace_style__iexact=subcategory) |
                 Q(bracelet_type__iexact=subcategory) |
-                Q(styles__slug__iexact=subcategory)
+                Q(styles__slug__iexact=subcategory) |
+                Q(subcategory_ref__slug__iexact=subcategory)
             )
 
         search = self.request.query_params.get("search")
@@ -178,15 +242,80 @@ class ProductViewSet(viewsets.ModelViewSet):
                 Q(name__icontains=search) |
                 Q(description__icontains=search) |
                 Q(sku__icontains=search) |
-                Q(slug__icontains=search)
+                Q(slug__icontains=search) |
+                Q(variants__sku__icontains=search)
             )
 
+        sort_param = self.request.query_params.get("sort") or self.request.query_params.get("ordering")
+        if sort_param == "price_asc":
+            qs = qs.annotate(min_price=Min("variants__price")).order_by("min_price", "base_price")
+        elif sort_param == "price_desc":
+            qs = qs.annotate(max_price=Max("variants__price")).order_by("-max_price", "-base_price")
+        elif sort_param == "newest":
+            qs = qs.order_by("-created_at")
+        elif sort_param == "name_asc":
+            qs = qs.order_by("name")
+        elif sort_param == "name_desc":
+            qs = qs.order_by("-name")
+        elif sort_param == "featured":
+            qs = qs.order_by("-is_featured", "-created_at")
+
         return qs.distinct()
+
+    @action(detail=True, methods=["get"], url_path="resolve-variant")
+    def resolve_variant(self, request, pk=None):
+        product = self.get_object()
+        metal_type = request.query_params.get("metal_type") or request.query_params.get("metal")
+        metal_karat = request.query_params.get("metal_karat") or request.query_params.get("karat")
+        size = request.query_params.get("size")
+        length = request.query_params.get("length")
+        bangle_size = request.query_params.get("bangle_size") or request.query_params.get("bangleSize")
+
+        variant_qs = product.variants.filter(is_active=True)
+
+        if metal_type:
+            variant_qs = variant_qs.filter(metal_type__iexact=metal_type)
+        if metal_karat:
+            variant_qs = variant_qs.filter(metal_karat__iexact=metal_karat)
+        if size is not None and size != "":
+            variant_qs = variant_qs.filter(size__iexact=size)
+        if length is not None and length != "":
+            variant_qs = variant_qs.filter(length__iexact=length)
+        if bangle_size is not None and bangle_size != "":
+            variant_qs = variant_qs.filter(bangle_size__iexact=bangle_size)
+
+        variant = variant_qs.first()
+        if not variant:
+            variant = product.variants.filter(is_active=True, is_default=True).first() or product.variants.filter(is_active=True).first()
+
+        if not variant:
+            return Response(
+                {"detail": "No active variant available for this product."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        variant_images = list(variant.images.all())
+        if not variant_images:
+            variant_images = list(product.images.all())
+
+        return Response({
+            "variant_id": variant.id,
+            "sku": variant.sku,
+            "metal_type": variant.metal_type,
+            "metal_karat": variant.metal_karat,
+            "size": variant.size,
+            "length": variant.length,
+            "bangle_size": variant.bangle_size,
+            "price": float(variant.price),
+            "compare_at_price": float(variant.compare_at_price) if variant.compare_at_price else None,
+            "stock": variant.stock,
+            "availability": variant.stock > 0,
+            "images": ProductImageSerializer(variant_images, many=True).data,
+        })
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
-        # Support page and limit params from Next.js queries
         limit_param = request.query_params.get("limit")
         page_param = request.query_params.get("page", 1)
 
@@ -216,6 +345,74 @@ class ProductViewSet(viewsets.ModelViewSet):
                 "limit": limit,
                 "total": total,
                 "totalPages": (total + limit - 1) // limit if limit > 0 else 1,
+            }
+        })
+
+
+class FacetedFiltersView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, format=None):
+        categories = list(Category.objects.values("id", "name", "slug"))
+        styles = list(Style.objects.values("id", "name", "slug"))
+        diamond_types = list(DiamondType.objects.values("id", "name", "slug"))
+        brands = list(Brand.objects.values("id", "name", "slug"))
+        collections = list(Collection.objects.values("id", "name", "slug"))
+
+        diamond_shapes = [
+            {"name": label, "value": code}
+            for code, label in Product.DIAMOND_CUT_CHOICES
+        ]
+
+        metals = list(
+            ProductVariant.objects.filter(is_active=True)
+            .exclude(metal_type="")
+            .values_list("metal_type", flat=True)
+            .distinct()
+        )
+        karats = list(
+            ProductVariant.objects.filter(is_active=True)
+            .exclude(metal_karat="")
+            .values_list("metal_karat", flat=True)
+            .distinct()
+        )
+        sizes = list(
+            ProductVariant.objects.filter(is_active=True)
+            .exclude(size="")
+            .values_list("size", flat=True)
+            .distinct()
+        )
+        lengths = list(
+            ProductVariant.objects.filter(is_active=True)
+            .exclude(length="")
+            .values_list("length", flat=True)
+            .distinct()
+        )
+        bangle_sizes = list(
+            ProductVariant.objects.filter(is_active=True)
+            .exclude(bangle_size="")
+            .values_list("bangle_size", flat=True)
+            .distinct()
+        )
+
+        min_price = ProductVariant.objects.filter(is_active=True).aggregate(m=Min("price"))["m"] or 0
+        max_price = ProductVariant.objects.filter(is_active=True).aggregate(m=Max("price"))["m"] or 10000
+
+        return Response({
+            "categories": categories,
+            "styles": styles,
+            "diamond_types": diamond_types,
+            "diamond_shapes": diamond_shapes,
+            "brands": brands,
+            "collections": collections,
+            "metals": metals,
+            "karats": karats,
+            "sizes": sizes,
+            "lengths": lengths,
+            "bangle_sizes": bangle_sizes,
+            "price_range": {
+                "min": float(min_price),
+                "max": float(max_price),
             }
         })
 

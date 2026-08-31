@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 
-from products.models import Product
+from products.models import Product, ProductVariant
 
 
 class Cart(models.Model):
@@ -26,7 +26,8 @@ class Cart(models.Model):
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE)
     product = models.ForeignKey(Product, related_name="cart_items", on_delete=models.CASCADE)
-    # Optional — only relevant for products seeded with ProductSize rows (rings, etc).
+    variant = models.ForeignKey(ProductVariant, related_name="cart_items", on_delete=models.CASCADE, null=True, blank=True)
+    # Optional — only relevant for legacy products seeded with ProductSize rows (rings, etc).
     size = models.CharField(max_length=50, blank=True, default="")
     quantity = models.PositiveIntegerField(default=1)
 
@@ -34,14 +35,16 @@ class CartItem(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("cart", "product", "size")
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} ({self.cart.user.email})"
+        sku_info = f" ({self.variant.sku})" if self.variant else ""
+        return f"{self.quantity} x {self.product.name}{sku_info} ({self.cart.user.email})"
 
     @property
     def unit_price(self):
+        if self.variant:
+            return Decimal(str(self.variant.price))
         return Decimal(str(self.product.price))
 
     @property
@@ -49,6 +52,8 @@ class CartItem(models.Model):
         return self.unit_price * self.quantity
 
     def available_stock(self):
+        if self.variant:
+            return self.variant.stock
         if self.size:
             product_size = self.product.sizes.filter(size=self.size).first()
             return product_size.stock if product_size else 0
@@ -104,10 +109,13 @@ class Order(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name="items", on_delete=models.CASCADE)
     product = models.ForeignKey(Product, related_name="order_items", on_delete=models.SET_NULL, null=True)
+    variant = models.ForeignKey(ProductVariant, related_name="order_items", on_delete=models.SET_NULL, null=True, blank=True)
 
     product_name = models.CharField(max_length=200)
-    product_sku = models.CharField(max_length=50)
+    product_sku = models.CharField(max_length=100)
     product_price = models.DecimalField(max_digits=12, decimal_places=2)
+    metal_type = models.CharField(max_length=30, blank=True, default="")
+    metal_karat = models.CharField(max_length=20, blank=True, default="")
     size = models.CharField(max_length=50, blank=True, default="")
     quantity = models.PositiveIntegerField()
 
