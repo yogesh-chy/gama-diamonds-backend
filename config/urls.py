@@ -8,7 +8,17 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 def health_check(request):
     return JsonResponse({"status": "ok", "app": "Gama Diamonds API"})
 
+def root_view(request):
+    return JsonResponse({
+        "status": "online",
+        "app": "Gama Diamonds API",
+        "docs": "/api/docs/",
+        "admin": "/admin/",
+        "health": "/health/"
+    })
+
 urlpatterns = [
+    path("", root_view, name="api-root"),
     path("health/", health_check, name="health-check"),
     path("api/health/", health_check, name="api-health-check"),
     path("admin/", admin.site.urls),
