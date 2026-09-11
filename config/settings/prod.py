@@ -42,8 +42,9 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
-# CORS configuration
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+# CORS configuration — sanitize trailing slashes to prevent corsheaders.E014
+raw_cors_origins = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOWED_ORIGINS = [origin.rstrip("/") for origin in raw_cors_origins if origin]
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 # Ensure CORS origins are also trusted for CSRF
