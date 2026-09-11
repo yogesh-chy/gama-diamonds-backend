@@ -19,6 +19,7 @@ def root_view(request):
 
 urlpatterns = [
     path("", root_view, name="api-root"),
+    path("api/", root_view, name="api-index"),
     path("health/", health_check, name="health-check"),
     path("api/health/", health_check, name="api-health-check"),
     path("admin/", admin.site.urls),
