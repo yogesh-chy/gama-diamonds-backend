@@ -237,7 +237,7 @@ CHECKOUT_RESERVATION_MINUTES = env.int("CHECKOUT_RESERVATION_MINUTES", default=1
 # ---------------------------------------------------------------------------
 REDIS_URL = env("REDIS_URL", default=None)
 
-if REDIS_URL:
+if REDIS_URL and not REDIS_URL.startswith("redis://localhost") and not REDIS_URL.startswith("redis://127.0.0.1"):
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
@@ -245,11 +245,6 @@ if REDIS_URL:
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
                 "IGNORE_EXCEPTIONS": True,
-                "SOCKET_CONNECT_TIMEOUT": 5,
-                "SOCKET_TIMEOUT": 5,
-                "CONNECTION_POOL_KWARGS": {
-                    "ssl_cert_reqs": None,
-                },
             },
         }
     }
