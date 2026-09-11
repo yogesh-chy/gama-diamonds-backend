@@ -6,20 +6,30 @@ logger = logging.getLogger(__name__)
 
 DEBUG = False
 
-# Reverse proxy SSL header (essential for Railway / Cloudflare / Envoy to avoid infinite redirect loop)
+# Reverse proxy SSL header (essential for Render / Cloudflare / Envoy to avoid infinite redirect loop)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# Allowed hosts: can be specified via env (comma-separated), defaults to railway domains and localhost
+# Allowed hosts: can be specified via env (comma-separated), defaults to render/railway domains and localhost
 ALLOWED_HOSTS = env.list(
     "ALLOWED_HOSTS",
-    default=[".railway.app", "localhost", "127.0.0.1", "*"]
+    default=[".onrender.com", ".railway.app", "localhost", "127.0.0.1", "*"]
 )
+
+import os
+render_external_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if render_external_hostname and render_external_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_external_hostname)
 
 # CSRF Trusted Origins for Django 4.0+
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["https://*.railway.app"]
+    default=["https://*.onrender.com", "https://*.railway.app"]
 )
+
+if render_external_hostname:
+    render_origin = f"https://{render_external_hostname}"
+    if render_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(render_origin)
 
 # Security headers
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
@@ -45,7 +55,7 @@ for origin in CORS_ALLOWED_ORIGINS:
 if not env("REDIS_URL", default=None):
     logger.warning(
         "REDIS_URL not set in production. Using local memory cache. "
-        "Provision a Redis instance on Railway and set REDIS_URL for distributed rate limiting."
+        "Provision a Redis instance on Render and set REDIS_URL for distributed rate limiting."
     )
 
 # Email backend
