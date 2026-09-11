@@ -197,11 +197,14 @@ def send_otp_email(email: str, code: str) -> None:
     if settings.DEBUG:
         print(f"[OTP DEV LOG] OTP code for {email}: {code}")
 
-    send_mail(
+    from django.core.mail import EmailMultiAlternatives
+
+    msg = EmailMultiAlternatives(
         subject="Your Gama Diamonds login code",
-        message=text_body,
+        body=text_body,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        html_message=html_body,
-        fail_silently=False,
+        to=[email],
     )
+    if html_body:
+        msg.attach_alternative(html_body, "text/html")
+    msg.send(fail_silently=False)

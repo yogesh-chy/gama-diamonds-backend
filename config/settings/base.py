@@ -267,6 +267,11 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)  # seconds — never let a slow SMTP call hang the request
 
+# Resend HTTP API — used as an alternative to SMTP on platforms that block
+# outbound SMTP ports (e.g. Render free tier). Set EMAIL_BACKEND to
+# "core.email_backends.ResendEmailBackend" and provide RESEND_API_KEY.
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
+
 # ---------------------------------------------------------------------------
 # OTP login (replaces password auth entirely — see accounts/services.py,
 # accounts/views.py). One flow serves both signup and login: a first-time

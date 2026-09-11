@@ -12,6 +12,7 @@ gunicorn>=22.0
 whitenoise>=6.6.0
 django-redis>=5.4
 cloudinary>=1.36.0
+resend>=2.0.0
 
 # testing
 pytest>=8.2
