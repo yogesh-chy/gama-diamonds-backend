@@ -485,6 +485,12 @@ class ProductSerializer(serializers.ModelSerializer):
                                 is_primary=True,
                             )
 
+        if product.variants.exists():
+            calc_stock = sum(v.stock for v in product.variants.filter(is_active=True))
+            if product.total_stock != calc_stock:
+                product.total_stock = calc_stock
+                product.save(update_fields=["total_stock"])
+
     @transaction.atomic
     def create(self, validated_data):
         images_data = validated_data.pop("images", None)

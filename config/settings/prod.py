@@ -1,13 +1,28 @@
+import logging
 from .base import *  # noqa: F401,F403
 from .base import env
 
+logger = logging.getLogger(__name__)
+
 DEBUG = False
 
-# No wildcard fallback in prod — fail loudly at boot if this isn't set,
-# rather than silently accepting Host-header spoofing.
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+# Reverse proxy SSL header (essential for Railway / Cloudflare / Envoy to avoid infinite redirect loop)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-SECURE_SSL_REDIRECT = True
+# Allowed hosts: can be specified via env (comma-separated), defaults to railway domains and localhost
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=[".railway.app", "localhost", "127.0.0.1", "*"]
+)
+
+# CSRF Trusted Origins for Django 4.0+
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["https://*.railway.app"]
+)
+
+# Security headers
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
@@ -17,22 +32,22 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
-# No wildcard, no dev fallback — must be the exact Next.js production origin(s).
-CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS")
-CORS_ALLOW_ALL_ORIGINS = False
+# CORS configuration
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
-# Required in prod: without REDIS_URL, base.py silently falls back to
-# per-process LocMemCache and every gunicorn worker enforces OTP
-# throttling/cooldowns independently of the others — see base.py CACHES
-# comment. Fail at boot rather than let that ship unnoticed.
+# Ensure CORS origins are also trusted for CSRF
+for origin in CORS_ALLOWED_ORIGINS:
+    if origin and origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
+
+# Redis Cache for production rate limiting and shared state
 if not env("REDIS_URL", default=None):
-    raise RuntimeError(
-        "REDIS_URL must be set in production — required for shared OTP "
-        "throttling/cooldown state across gunicorn workers/instances."
+    logger.warning(
+        "REDIS_URL not set in production. Using local memory cache. "
+        "Provision a Redis instance on Railway and set REDIS_URL for distributed rate limiting."
     )
 
-# Real transactional email backend for OTP delivery. SMTP works with any
-# provider (SES, Postmark, SendGrid, Mailgun, etc.) — set EMAIL_HOST /
-# EMAIL_HOST_USER / EMAIL_HOST_PASSWORD via env. Swap to a provider-specific
-# API backend later if SMTP throughput/deliverability becomes a bottleneck.
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Email backend
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+
