@@ -15,14 +15,21 @@ try:
     password = os.environ.get("DJANGO_SUPERUSER_PASSWORD")
 
     if email and password:
-        if not User.objects.filter(email=email).exists():
+        user = User.objects.filter(email=email).first()
+        if not user:
             print(f"Creating superuser: {email}")
             user = User.objects.create_superuser(email=email, password=password)
             user.is_email_verified = True
             user.save()
             print("Superuser created successfully.")
         else:
-            print(f"Superuser {email} already exists.")
+            print(f"Superuser {email} already exists. Updating password and permissions...")
+            user.set_password(password)
+            user.is_staff = True
+            user.is_superuser = True
+            user.is_email_verified = True
+            user.save()
+            print("Superuser updated successfully.")
     else:
         print("DJANGO_SUPERUSER_EMAIL and DJANGO_SUPERUSER_PASSWORD not set. Skipping automatic superuser creation.")
 except Exception as e:
