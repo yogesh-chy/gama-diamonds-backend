@@ -23,7 +23,7 @@ if render_external_hostname and render_external_hostname not in ALLOWED_HOSTS:
 # CSRF Trusted Origins for Django 4.0+
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["https://*.onrender.com", "https://*.railway.app"]
+    default=["https://*.onrender.com", "https://*.railway.app", "https://*.vercel.app"]
 )
 
 if render_external_hostname:
@@ -45,6 +45,10 @@ X_FRAME_OPTIONS = "DENY"
 # CORS configuration — sanitize trailing slashes to prevent corsheaders.E014
 raw_cors_origins = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOWED_ORIGINS = [origin.rstrip("/") for origin in raw_cors_origins if origin]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+    r"^http://localhost:\d+$",
+]
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 # Ensure CORS origins are also trusted for CSRF
