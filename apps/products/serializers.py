@@ -162,9 +162,15 @@ class DiamondSpecificationSerializer(serializers.ModelSerializer):
 
 class ProductListSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
+    variants = ProductVariantSerializer(many=True, read_only=True)
     thumbnail = serializers.SerializerMethodField()
     secondaryImage = serializers.SerializerMethodField()
     price = serializers.SerializerMethodField()
+    pricing = serializers.SerializerMethodField()
+    inventory = serializers.SerializerMethodField()
+    totalStock = serializers.IntegerField(source="total_stock", read_only=True)
+    basePrice = serializers.DecimalField(source="base_price", max_digits=12, decimal_places=2, read_only=True)
+    discountPrice = serializers.DecimalField(source="discount_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True)
     available = serializers.BooleanField(source="is_available", read_only=True)
     diamondTypeDetail = DiamondTypeSerializer(source="diamond_type", read_only=True)
     brandDetail = BrandSerializer(source="brand", read_only=True)
@@ -177,10 +183,19 @@ class ProductListSerializer(serializers.ModelSerializer):
             "slug",
             "sku",
             "category",
+            "base_price",
+            "basePrice",
+            "discount_price",
+            "discountPrice",
+            "total_stock",
+            "totalStock",
+            "inventory",
             "images",
+            "variants",
             "thumbnail",
             "secondaryImage",
             "price",
+            "pricing",
             "available",
             "is_featured",
             "is_active",
@@ -211,6 +226,20 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     def get_price(self, obj):
         return obj.price_range
+
+    def get_pricing(self, obj):
+        range_data = obj.price_range
+        return {
+            "basePrice": float(obj.base_price) if obj.base_price is not None else range_data["min"],
+            "discountPrice": float(obj.discount_price) if obj.discount_price is not None else None,
+            "taxPercentage": float(obj.tax_percentage) if obj.tax_percentage is not None else 0,
+        }
+
+    def get_inventory(self, obj):
+        return {
+            "totalStock": obj.total_stock if not obj.variants.exists() else sum(v.stock for v in obj.variants.all()),
+            "lowStockThreshold": obj.low_stock_threshold,
+        }
 
 
 class ProductSerializer(serializers.ModelSerializer):
