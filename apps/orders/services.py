@@ -223,15 +223,17 @@ def decrement_stock_for_order(order):
         if item.variant:
             item.variant.stock = max(item.variant.stock - item.quantity, 0)
             item.variant.save(update_fields=["stock"])
+            if item.product:
+                item.product.total_stock = sum(v.stock for v in item.product.variants.filter(is_active=True))
+                item.product.save(update_fields=["total_stock"])
         elif item.product:
             if item.size:
                 product_size = item.product.sizes.filter(size=item.size).first()
                 if product_size:
                     product_size.stock = max(product_size.stock - item.quantity, 0)
                     product_size.save(update_fields=["stock"])
-            else:
-                item.product.total_stock = max(item.product.total_stock - item.quantity, 0)
-                item.product.save(update_fields=["total_stock"])
+            item.product.total_stock = max(item.product.total_stock - item.quantity, 0)
+            item.product.save(update_fields=["total_stock"])
 
     order.stock_decremented_at = timezone.now()
     order.save(update_fields=["stock_decremented_at"])
