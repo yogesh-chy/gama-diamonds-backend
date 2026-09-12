@@ -73,6 +73,9 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            "sku": {"validators": []},
+        }
 
 
 class ProductSizeSerializer(serializers.ModelSerializer):
@@ -491,7 +494,7 @@ class ProductSerializer(serializers.ModelSerializer):
             if var_id:
                 variant, _ = ProductVariant.objects.update_or_create(id=var_id, product=product, defaults=defaults)
             else:
-                variant = ProductVariant.objects.create(product=product, **defaults)
+                variant, _ = ProductVariant.objects.update_or_create(sku=sku_val, product=product, defaults=defaults)
             
             seen_ids.append(variant.id)
 
@@ -513,6 +516,9 @@ class ProductSerializer(serializers.ModelSerializer):
                                 public_id=img.get("publicId", img.get("public_id", "")),
                                 is_primary=True,
                             )
+
+        if seen_ids:
+            product.variants.exclude(id__in=seen_ids).delete()
 
         if product.variants.exists():
             calc_stock = sum(v.stock for v in product.variants.filter(is_active=True))
