@@ -169,7 +169,7 @@ class AdminCartViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = AdminCartSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
-    queryset = Cart.objects.prefetch_related("items__product__images", "items__product", "user").all()
+    queryset = Cart.objects.prefetch_related("items__product__images", "items__product", "user").order_by("-updated_at")
 
     def get_queryset(self):
         qs = super().get_queryset()
