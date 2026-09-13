@@ -259,18 +259,14 @@ else:
 # sending real mail. Point these at a transactional provider (SES, Postmark,
 # SendGrid SMTP, etc.) in prod — see prod.py.
 # ---------------------------------------------------------------------------
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Gama Diamonds <no-reply@gamadiamonds.example>")
-EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)  # seconds — never let a slow SMTP call hang the request
-
-# Resend HTTP API — used as an alternative to SMTP on platforms that block
-# outbound SMTP ports (e.g. Render free tier). Set EMAIL_BACKEND to
-# "core.email_backends.ResendEmailBackend" and provide RESEND_API_KEY.
-RESEND_API_KEY = env("RESEND_API_KEY", default="")
 
 # ---------------------------------------------------------------------------
 # OTP login (replaces password auth entirely — see accounts/services.py,
