@@ -154,10 +154,27 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         category = self.request.query_params.get("category")
         if category:
-          if category.lower() in ["rings", "ring"]:
-            qs = qs.filter(Q(category__icontains="ring") | Q(category_ref__slug__icontains="ring"))
-          else:
-            qs = qs.filter(Q(category__iexact=category) | Q(category_ref__slug__iexact=category))
+            cat_lower = category.lower().strip()
+            if cat_lower in ["rings", "ring"]:
+                qs = qs.filter(Q(category__in=["rings", "engagement-rings", "wedding-bands", "eternity-bands"]) | Q(category_ref__slug__in=["rings", "engagement-rings", "wedding-bands", "eternity-bands"]))
+            elif cat_lower in ["engagement-rings", "engagement", "engagement-ring"]:
+                qs = qs.filter(Q(category="engagement-rings") | Q(category_ref__slug="engagement-rings"))
+            elif cat_lower in ["wedding-bands", "wedding", "wedding-rings", "wedding-ring"]:
+                qs = qs.filter(Q(category="wedding-bands") | Q(category_ref__slug="wedding-bands"))
+            elif cat_lower in ["eternity-bands", "eternity", "eternity-rings", "eternity-ring"]:
+                qs = qs.filter(Q(category="eternity-bands") | Q(category_ref__slug="eternity-bands"))
+            elif cat_lower in ["earrings", "earring"]:
+                qs = qs.filter(Q(category="earrings") | Q(category_ref__slug="earrings"))
+            elif cat_lower in ["necklaces", "necklace"]:
+                qs = qs.filter(Q(category__in=["necklaces", "pendants"]) | Q(category_ref__slug__in=["necklaces", "pendants"]))
+            elif cat_lower in ["pendants", "pendant"]:
+                qs = qs.filter(Q(category="pendants") | Q(category_ref__slug="pendants"))
+            elif cat_lower in ["bracelets", "bracelet"]:
+                qs = qs.filter(Q(category__in=["bracelets", "bangles"]) | Q(category_ref__slug__in=["bracelets", "bangles"]))
+            elif cat_lower in ["bangles", "bangle"]:
+                qs = qs.filter(Q(category="bangles") | Q(category_ref__slug="bangles"))
+            else:
+                qs = qs.filter(Q(category__iexact=category) | Q(category_ref__slug__iexact=category))
 
         status_param = self.request.query_params.get("status")
         if status_param == "active":
@@ -169,6 +186,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         if featured == "true":
             qs = qs.filter(is_featured=True)
 
+        gender = self.request.query_params.get("gender")
+        if gender:
+            qs = qs.filter(gender__iexact=gender)
+
+        ring_type = self.request.query_params.get("ring_type")
+        if ring_type:
+            rt_clean = ring_type.replace("-", " ")
+            qs = qs.filter(Q(ring_type__icontains=rt_clean) | Q(ring_style__icontains=rt_clean))
+
         shape = self.request.query_params.get("shape") or self.request.query_params.get("diamond_cut") or self.request.query_params.get("diamond_shape")
         if shape:
             s_clean = shape.lower().replace("-cut", "").replace("-brilliant", "").replace("-shape", "").strip()
@@ -177,20 +203,21 @@ class ProductViewSet(viewsets.ModelViewSet):
         style = self.request.query_params.get("style")
         if style:
             s_lower = style.lower().strip()
-            style_q = Q(styles__slug__iexact=style) | Q(subcategory_ref__slug__iexact=style) | Q(subcategory_ref__name__icontains=style)
+            s_clean = s_lower.replace("-", " ")
+            style_q = (
+                Q(styles__slug__iexact=style) |
+                Q(subcategory_ref__slug__iexact=style) |
+                Q(subcategory_ref__name__icontains=s_clean) |
+                Q(ring_style__icontains=s_clean) |
+                Q(ring_type__icontains=s_clean) |
+                Q(name__icontains=s_clean)
+            )
             if s_lower in ["three-stone", "trilogy", "triology"]:
-                style_q |= Q(subcategory_ref__name__icontains="triology") | Q(subcategory_ref__name__icontains="trilogy") | Q(subcategory_ref__name__icontains="three") | Q(name__icontains="trilogy") | Q(name__icontains="three stone")
+                style_q |= Q(name__icontains="trilogy") | Q(name__icontains="three stone")
             elif s_lower in ["diamond-shoulder", "shoulder"]:
-                style_q |= Q(subcategory_ref__name__icontains="shoulder") | Q(name__icontains="shoulder")
+                style_q |= Q(name__icontains="shoulder")
             elif s_lower in ["under-halo"]:
-                style_q |= Q(subcategory_ref__name__icontains="under halo") | Q(name__icontains="under halo")
-            elif s_lower in ["halo"]:
-                style_q |= Q(subcategory_ref__name__iexact="halo") | Q(name__icontains="halo")
-            elif s_lower in ["solitaire"]:
-                style_q |= Q(subcategory_ref__name__iexact="solitaire") | Q(name__icontains="solitaire")
-            else:
-                s_clean = s_lower.replace("-", " ")
-                style_q |= Q(subcategory_ref__name__icontains=s_clean) | Q(name__icontains=s_clean)
+                style_q |= Q(name__icontains="under halo")
             qs = qs.filter(style_q)
 
         diamond_type = self.request.query_params.get("diamond_type")
@@ -227,13 +254,20 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         subcategory = self.request.query_params.get("subcategory")
         if subcategory:
+            sub_clean = subcategory.lower().replace("-", " ")
             qs = qs.filter(
-                Q(diamond_cut__iexact=subcategory) |
+                Q(subcategory_ref__slug__iexact=subcategory) |
+                Q(subcategory_ref__name__icontains=sub_clean) |
+                Q(ring_type__icontains=sub_clean) |
+                Q(ring_style__icontains=sub_clean) |
                 Q(earring_type__iexact=subcategory) |
+                Q(earring_style__icontains=sub_clean) |
                 Q(necklace_style__iexact=subcategory) |
+                Q(necklace_type__icontains=sub_clean) |
                 Q(bracelet_type__iexact=subcategory) |
+                Q(bracelet_style__icontains=sub_clean) |
                 Q(styles__slug__iexact=subcategory) |
-                Q(subcategory_ref__slug__iexact=subcategory)
+                Q(diamond_cut__iexact=subcategory)
             )
 
         search = self.request.query_params.get("search")
