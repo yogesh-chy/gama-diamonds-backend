@@ -507,12 +507,12 @@ class ProductSerializer(serializers.ModelSerializer):
 
         DiamondSpecification.objects.update_or_create(product=product, defaults=cleaned_data)
 
-        # Automatically align product.diamond_type if specified
+        # Always align product.diamond_type from diamond_origin
         origin = cleaned_data.get("diamond_origin")
-        if origin and not product.diamond_type:
+        if origin:
             target_name = "Natural" if origin == "natural" else "Lab-Grown"
             dt = DiamondType.objects.filter(name__iexact=target_name).first()
-            if dt:
+            if dt and product.diamond_type != dt:
                 product.diamond_type = dt
                 product.save(update_fields=["diamond_type"])
 
@@ -522,35 +522,81 @@ class ProductSerializer(serializers.ModelSerializer):
         
         seen_ids = []
         for idx, var_data in enumerate(variants_data):
+            # Make a mutable copy so we don't corrupt the caller's dict
+            var_data = dict(var_data)
             var_id = var_data.get("id")
             images_data = var_data.pop("images", [])
-            sku_val = var_data.get("sku")
-            if not sku_val:
-                sku_val = f"{product.sku}-V{idx+1}"
+            sku_val = var_data.get("sku") or f"{product.sku}-V{idx+1}"
+
+            # Explicitly resolve snake_case vs camelCase, preferring explicit
+            # snake_case values. This prevents stale camelCase values from the
+            # API response from overriding user-edited snake_case values.
+            def _pick(snake, camel, fallback=None):
+                """Pick the first non-None value: snake_case > camelCase > fallback."""
+                val = var_data.get(snake)
+                if val is not None and val != "":
+                    return val
+                val = var_data.get(camel)
+                if val is not None and val != "":
+                    return val
+                return fallback
 
             defaults = {
                 "sku": sku_val,
-                "metal_type": var_data.get("metal_type", var_data.get("metalType", "")),
-                "metal_karat": var_data.get("metal_karat", var_data.get("metalKarat", "")),
-                "metal_weight_grams": var_data.get("metal_weight_grams", var_data.get("metalWeightGrams", None)),
+                "metal_type": _pick("metal_type", "metalType", product.metal_type or "yellow-gold"),
+                "metal_karat": _pick("metal_karat", "metalKarat", product.metal_karat or "18K"),
+                "metal_weight_grams": _pick("metal_weight_grams", "metalWeightGrams", None),
                 "size": str(var_data.get("size", "")),
                 "length": str(var_data.get("length", "")),
-                "bangle_size": str(var_data.get("bangle_size", var_data.get("bangleSize", ""))),
+                "bangle_size": str(_pick("bangle_size", "bangleSize", "")),
                 "price": var_data.get("price", product.base_price or 0),
-                "compare_at_price": var_data.get("compare_at_price", var_data.get("compareAtPrice", None)),
-                "cost_price": var_data.get("cost_price", var_data.get("costPrice", None)),
+                "compare_at_price": _pick("compare_at_price", "compareAtPrice", None),
+                "cost_price": _pick("cost_price", "costPrice", None),
                 "stock": int(var_data.get("stock", 0)),
-                "track_inventory": var_data.get("track_inventory", var_data.get("trackInventory", True)),
-                "allow_backorder": var_data.get("allow_backorder", var_data.get("allowBackorder", False)),
+                "track_inventory": _pick("track_inventory", "trackInventory", True),
+                "allow_backorder": _pick("allow_backorder", "allowBackorder", False),
                 "availability": var_data.get("availability", "in_stock"),
-                "is_active": var_data.get("is_active", var_data.get("isActive", True)),
-                "is_default": var_data.get("is_default", var_data.get("isDefault", idx == 0)),
+                "is_active": _pick("is_active", "isActive", True),
+                "is_default": _pick("is_default", "isDefault", idx == 0),
             }
 
+            variant = None
             if var_id:
-                variant, _ = ProductVariant.objects.update_or_create(id=var_id, product=product, defaults=defaults)
+                variant = ProductVariant.objects.filter(id=var_id, product=product).first()
+            if not variant:
+                variant = ProductVariant.objects.filter(sku=sku_val, product=product).first()
+            if not variant and len(variants_data) == 1:
+                variant = product.variants.first()
+
+            if variant:
+                for attr, val in defaults.items():
+                    setattr(variant, attr, val)
+                try:
+                    variant.save()
+                except Exception:
+                    # If the unique_product_variant_combination constraint fires
+                    # (e.g. changing metal to one that already exists), try
+                    # update_fields to bypass the constraint check on unchanged rows.
+                    try:
+                        variant.save(update_fields=list(defaults.keys()))
+                    except Exception:
+                        # Last resort: force save by deleting conflicting variant first
+                        conflicting = ProductVariant.objects.filter(
+                            product=product,
+                            metal_type=defaults["metal_type"],
+                            metal_karat=defaults["metal_karat"],
+                            size=defaults["size"],
+                            length=defaults["length"],
+                            bangle_size=defaults["bangle_size"],
+                        ).exclude(id=variant.id).first()
+                        if conflicting:
+                            conflicting.delete()
+                        variant.save()
             else:
-                variant, _ = ProductVariant.objects.update_or_create(sku=sku_val, product=product, defaults=defaults)
+                if ProductVariant.objects.filter(sku=sku_val).exists():
+                    sku_val = f"{product.sku}-{uuid.uuid4().hex[:4].upper()}"
+                    defaults["sku"] = sku_val
+                variant = ProductVariant.objects.create(product=product, **defaults)
             
             seen_ids.append(variant.id)
 
@@ -683,6 +729,8 @@ class ProductSerializer(serializers.ModelSerializer):
         collections_data = validated_data.pop("collections", None)
         related_products_data = validated_data.pop("related_products", None)
         diamond_spec_data = validated_data.pop("diamond_spec", None)
+        if diamond_spec_data is None and self.context.get("request"):
+            diamond_spec_data = self.context.get("request").data.get("diamond_spec") or self.context.get("request").data.get("diamondSpec")
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
