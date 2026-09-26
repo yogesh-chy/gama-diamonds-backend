@@ -524,13 +524,27 @@ class ProductSerializer(serializers.ModelSerializer):
         elif not cleaned_data.get("carat_weight"):
             cleaned_data["carat_weight"] = 1.0
 
-        DiamondSpecification.objects.update_or_create(product=product, defaults=cleaned_data)
+        try:
+            DiamondSpecification.objects.update_or_create(product=product, defaults=cleaned_data)
+        except Exception:
+            spec = DiamondSpecification.objects.filter(product=product).first()
+            if spec:
+                for attr, val in cleaned_data.items():
+                    setattr(spec, attr, val)
+                spec.save()
 
         # Always align product.diamond_type from diamond_origin
         origin = cleaned_data.get("diamond_origin")
         if origin:
             target_name = "Natural" if origin == "natural" else "Lab-Grown"
             dt = DiamondType.objects.filter(name__iexact=target_name).first()
+            if not dt:
+                dt = DiamondType.objects.filter(slug__iexact=slugify(target_name)).first()
+            if not dt:
+                try:
+                    dt = DiamondType.objects.create(name=target_name, slug=slugify(target_name))
+                except Exception:
+                    dt = DiamondType.objects.filter(name__iexact=target_name).first()
             if dt and product.diamond_type != dt:
                 product.diamond_type = dt
                 product.save(update_fields=["diamond_type"])
@@ -541,17 +555,12 @@ class ProductSerializer(serializers.ModelSerializer):
         
         seen_ids = []
         for idx, var_data in enumerate(variants_data):
-            # Make a mutable copy so we don't corrupt the caller's dict
             var_data = dict(var_data)
             var_id = var_data.get("id")
             images_data = var_data.pop("images", [])
             sku_val = var_data.get("sku") or f"{product.sku}-V{idx+1}"
 
-            # Explicitly resolve snake_case vs camelCase, preferring explicit
-            # snake_case values. This prevents stale camelCase values from the
-            # API response from overriding user-edited snake_case values.
             def _pick(snake, camel, fallback=None):
-                """Pick the first non-None value: snake_case > camelCase > fallback."""
                 val = var_data.get(snake)
                 if val is not None and val != "":
                     return val
@@ -584,38 +593,55 @@ class ProductSerializer(serializers.ModelSerializer):
                 variant = ProductVariant.objects.filter(id=var_id, product=product).first()
             if not variant:
                 variant = ProductVariant.objects.filter(sku=sku_val, product=product).first()
+            if not variant:
+                variant = ProductVariant.objects.filter(
+                    product=product,
+                    metal_type=defaults["metal_type"],
+                    metal_karat=defaults["metal_karat"],
+                    size=defaults["size"],
+                    length=defaults["length"],
+                    bangle_size=defaults["bangle_size"],
+                ).first()
             if not variant and len(variants_data) == 1:
                 variant = product.variants.first()
 
             if variant:
+                # Delete any other variant that has the same combination to prevent UniqueConstraint violation
+                ProductVariant.objects.filter(
+                    product=product,
+                    metal_type=defaults["metal_type"],
+                    metal_karat=defaults["metal_karat"],
+                    size=defaults["size"],
+                    length=defaults["length"],
+                    bangle_size=defaults["bangle_size"],
+                ).exclude(id=variant.id).delete()
+
+                # Ensure SKU is not taken by another variant outside this product
+                sku_conflict = ProductVariant.objects.filter(sku=defaults["sku"]).exclude(id=variant.id).exists()
+                if sku_conflict:
+                    defaults["sku"] = f"{product.sku}-{uuid.uuid4().hex[:4].upper()}"
+
                 for attr, val in defaults.items():
                     setattr(variant, attr, val)
-                try:
-                    variant.save()
-                except Exception:
-                    # If the unique_product_variant_combination constraint fires
-                    # (e.g. changing metal to one that already exists), try
-                    # update_fields to bypass the constraint check on unchanged rows.
-                    try:
-                        variant.save(update_fields=list(defaults.keys()))
-                    except Exception:
-                        # Last resort: force save by deleting conflicting variant first
-                        conflicting = ProductVariant.objects.filter(
-                            product=product,
-                            metal_type=defaults["metal_type"],
-                            metal_karat=defaults["metal_karat"],
-                            size=defaults["size"],
-                            length=defaults["length"],
-                            bangle_size=defaults["bangle_size"],
-                        ).exclude(id=variant.id).first()
-                        if conflicting:
-                            conflicting.delete()
-                        variant.save()
+                variant.save()
             else:
-                if ProductVariant.objects.filter(sku=sku_val).exists():
-                    sku_val = f"{product.sku}-{uuid.uuid4().hex[:4].upper()}"
-                    defaults["sku"] = sku_val
-                variant = ProductVariant.objects.create(product=product, **defaults)
+                conflicting = ProductVariant.objects.filter(
+                    product=product,
+                    metal_type=defaults["metal_type"],
+                    metal_karat=defaults["metal_karat"],
+                    size=defaults["size"],
+                    length=defaults["length"],
+                    bangle_size=defaults["bangle_size"],
+                ).first()
+                if conflicting:
+                    variant = conflicting
+                    for attr, val in defaults.items():
+                        setattr(variant, attr, val)
+                    variant.save()
+                else:
+                    if ProductVariant.objects.filter(sku=defaults["sku"]).exists():
+                        defaults["sku"] = f"{product.sku}-{uuid.uuid4().hex[:4].upper()}"
+                    variant = ProductVariant.objects.create(product=product, **defaults)
             
             seen_ids.append(variant.id)
 
@@ -667,63 +693,102 @@ class ProductSerializer(serializers.ModelSerializer):
         return obj.ring_type or obj.ring_style or obj.earring_type or obj.necklace_style or obj.bracelet_type or ""
 
     def _sync_taxonomy(self, product, raw_data=None):
-        raw = raw_data or {}
-        cat_slug = product.category or raw.get("category")
-        if cat_slug:
-            cat_obj = Category.objects.filter(slug__iexact=cat_slug).first() or Category.objects.filter(name__iexact=cat_slug).first()
-            if not cat_obj:
-                cat_clean = cat_slug.replace("-", " ").title()
-                cat_obj = Category.objects.filter(name__iexact=cat_clean).first()
-            if cat_obj and product.category_ref != cat_obj:
-                product.category_ref = cat_obj
-                product.save(update_fields=["category_ref"])
-
-        sub_name = (
-            raw.get("subcategory")
-            or raw.get("ring_type")
-            or raw.get("ring_style")
-            or raw.get("earring_type")
-            or raw.get("necklace_style")
-            or raw.get("bracelet_type")
-            or product.ring_type
-            or product.ring_style
-            or product.earring_type
-            or product.necklace_style
-            or product.bracelet_type
-        )
-        if sub_name:
-            sub_str = str(sub_name).strip()
-            updated_fields = []
-            if not product.ring_type:
-                product.ring_type = sub_str
-                updated_fields.append("ring_type")
-            if not product.ring_style:
-                product.ring_style = sub_str
-                updated_fields.append("ring_style")
-
-            if product.category_ref:
-                sub_slug = slugify(sub_str)
-                sub_obj = (
-                    Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
-                    or Subcategory.objects.filter(category=product.category_ref, name__iexact=sub_str).first()
+        try:
+            raw = raw_data or {}
+            cat_slug = product.category or raw.get("category")
+            cat_obj = None
+            if cat_slug:
+                cat_slug_clean = slugify(str(cat_slug))
+                cat_clean_name = str(cat_slug).replace("-", " ").title()
+                cat_obj = (
+                    Category.objects.filter(slug__iexact=cat_slug_clean).first()
+                    or Category.objects.filter(slug__iexact=cat_slug).first()
+                    or Category.objects.filter(name__iexact=cat_clean_name).first()
+                    or Category.objects.filter(name__iexact=cat_slug).first()
                 )
-                if not sub_obj:
+                if not cat_obj and cat_slug_clean:
                     try:
-                        sub_obj = Subcategory.objects.create(category=product.category_ref, name=sub_str, slug=sub_slug)
+                        cat_obj = Category.objects.create(name=cat_clean_name, slug=cat_slug_clean)
                     except Exception:
-                        sub_obj = Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
+                        cat_obj = Category.objects.filter(slug__iexact=cat_slug_clean).first()
 
-                if sub_obj and product.subcategory_ref != sub_obj:
-                    product.subcategory_ref = sub_obj
-                    updated_fields.append("subcategory_ref")
+                if cat_obj and product.category_ref != cat_obj:
+                    product.category_ref = cat_obj
+                    product.save(update_fields=["category_ref"])
 
-            if updated_fields:
-                product.save(update_fields=updated_fields)
+            sub_name = (
+                raw.get("subcategory")
+                or raw.get("ring_type")
+                or raw.get("ring_style")
+                or raw.get("earring_type")
+                or raw.get("necklace_style")
+                or raw.get("bracelet_type")
+                or product.ring_type
+                or product.ring_style
+                or product.earring_type
+                or product.necklace_style
+                or product.bracelet_type
+            )
+            if sub_name:
+                sub_str = str(sub_name).strip()
+                updated_fields = []
+                cat_type = str(product.category or "").lower()
 
-            st_slug = slugify(sub_str)
-            style_obj = Style.objects.filter(slug__iexact=st_slug).first() or Style.objects.filter(name__iexact=sub_str).first()
-            if style_obj:
-                product.styles.add(style_obj)
+                if "earring" in cat_type:
+                    if not product.earring_type:
+                        product.earring_type = sub_str
+                        updated_fields.append("earring_type")
+                    if not product.earring_style:
+                        product.earring_style = sub_str
+                        updated_fields.append("earring_style")
+                elif "necklace" in cat_type or "pendant" in cat_type:
+                    if not product.necklace_style:
+                        product.necklace_style = sub_str
+                        updated_fields.append("necklace_style")
+                elif "bracelet" in cat_type or "bangle" in cat_type:
+                    if not product.bracelet_type:
+                        product.bracelet_type = sub_str
+                        updated_fields.append("bracelet_type")
+                else:
+                    if not product.ring_type:
+                        product.ring_type = sub_str
+                        updated_fields.append("ring_type")
+                    if not product.ring_style:
+                        product.ring_style = sub_str
+                        updated_fields.append("ring_style")
+
+                if product.category_ref:
+                    sub_slug = slugify(sub_str)
+                    if sub_slug:
+                        sub_obj = (
+                            Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
+                            or Subcategory.objects.filter(category=product.category_ref, name__iexact=sub_str).first()
+                        )
+                        if not sub_obj:
+                            try:
+                                sub_obj = Subcategory.objects.create(category=product.category_ref, name=sub_str, slug=sub_slug)
+                            except Exception:
+                                sub_obj = Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
+
+                        if sub_obj and product.subcategory_ref != sub_obj:
+                            product.subcategory_ref = sub_obj
+                            updated_fields.append("subcategory_ref")
+
+                if updated_fields:
+                    product.save(update_fields=updated_fields)
+
+                st_slug = slugify(sub_str)
+                if st_slug:
+                    style_obj = Style.objects.filter(slug__iexact=st_slug).first() or Style.objects.filter(name__iexact=sub_str).first()
+                    if not style_obj:
+                        try:
+                            style_obj = Style.objects.create(name=sub_str, slug=st_slug)
+                        except Exception:
+                            style_obj = Style.objects.filter(slug__iexact=st_slug).first()
+                    if style_obj:
+                        product.styles.add(style_obj)
+        except Exception:
+            pass
 
     @transaction.atomic
     def create(self, validated_data):
