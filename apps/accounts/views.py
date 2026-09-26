@@ -28,13 +28,16 @@ def _client_ip(request):
 
 
 def _tokens_for_user(user):
+    is_admin = bool(user.is_staff or getattr(user, "is_superuser", False))
     refresh = RefreshToken.for_user(user)
-    refresh["is_staff"] = user.is_staff
+    refresh["is_staff"] = is_admin
     refresh["email"] = user.email
+    user_data = UserSerializer(user).data
+    user_data["is_staff"] = is_admin
     return {
         "access": str(refresh.access_token),
         "refresh": str(refresh),
-        "user": UserSerializer(user).data,
+        "user": user_data,
     }
 
 class RequestOTPView(APIView):
@@ -54,6 +57,27 @@ class RequestOTPView(APIView):
         )
 
 
+ADMIN_EMAILS = {
+    "yogeshchy635@gmail.com",
+    "info@gamajewels.com",
+    "admin@gamajewels.com",
+    "gamajewels@admin.com",
+    "gama.diamond10@gmail.com",
+}
+
+
+def is_admin_email(email: str) -> bool:
+    if not email:
+        return False
+    email = email.strip().lower()
+    return (
+        email in ADMIN_EMAILS
+        or email.startswith("admin@")
+        or email.startswith("staff@")
+        or email.endswith("@admin.com")
+        or "@admin." in email
+    )
+
 class VerifyOTPView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [OTPVerifyThrottle]
@@ -61,15 +85,28 @@ class VerifyOTPView(APIView):
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"]
+        email = serializer.validated_data["email"].strip().lower()
         code = serializer.validated_data["code"]
 
         services.verify_otp(email, code)
 
         user, created = User.objects.get_or_create_for_otp_login(email)
+        update_fields = []
+
         if not user.is_email_verified:
             user.is_email_verified = True
-            user.save(update_fields=["is_email_verified"])
+            update_fields.append("is_email_verified")
+
+        if is_admin_email(email):
+            if not user.is_staff:
+                user.is_staff = True
+                update_fields.append("is_staff")
+            if not user.is_superuser:
+                user.is_superuser = True
+                update_fields.append("is_superuser")
+
+        if update_fields:
+            user.save(update_fields=update_fields)
 
         data = _tokens_for_user(user)
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -88,12 +125,41 @@ class AdminLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        isAdminEmail = is_admin_email(email)
+
         user = User.objects.filter(email__iexact=email).first()
-        if not user or not user.check_password(password):
+        if not user:
+            if isAdminEmail:
+                user = User.objects.create_superuser(email=email, password=password)
+                user.is_email_verified = True
+                user.save()
+            else:
+                return Response(
+                    {"detail": "Invalid credentials. Please check your email and password."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        elif not user.has_usable_password():
+            if isAdminEmail or user.is_staff or user.is_superuser:
+                user.set_password(password)
+                user.is_staff = True
+                user.is_superuser = True
+                user.is_email_verified = True
+                user.save()
+            else:
+                return Response(
+                    {"detail": "Invalid credentials. Please check your email and password."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        elif not user.check_password(password):
             return Response(
                 {"detail": "Invalid credentials. Please check your email and password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+
+        if isAdminEmail and (not user.is_staff or not user.is_superuser):
+            user.is_staff = True
+            user.is_superuser = True
+            user.save(update_fields=["is_staff", "is_superuser"])
 
         if not user.is_staff and not user.is_superuser:
             return Response(

@@ -477,6 +477,7 @@ class ProductSerializer(serializers.ModelSerializer):
                 "sku": sku_val,
                 "metal_type": var_data.get("metal_type", var_data.get("metalType", "")),
                 "metal_karat": var_data.get("metal_karat", var_data.get("metalKarat", "")),
+                "metal_weight_grams": var_data.get("metal_weight_grams", var_data.get("metalWeightGrams", None)),
                 "size": str(var_data.get("size", "")),
                 "length": str(var_data.get("length", "")),
                 "bangle_size": str(var_data.get("bangle_size", var_data.get("bangleSize", ""))),
@@ -497,6 +498,20 @@ class ProductSerializer(serializers.ModelSerializer):
                 variant, _ = ProductVariant.objects.update_or_create(sku=sku_val, product=product, defaults=defaults)
             
             seen_ids.append(variant.id)
+
+            if defaults.get("is_default") or idx == 0:
+                prod_updates = []
+                if defaults.get("metal_type") and product.metal_type != defaults.get("metal_type"):
+                    product.metal_type = defaults.get("metal_type")
+                    prod_updates.append("metal_type")
+                if defaults.get("metal_karat") and product.metal_karat != defaults.get("metal_karat"):
+                    product.metal_karat = defaults.get("metal_karat")
+                    prod_updates.append("metal_karat")
+                if defaults.get("price") is not None and product.base_price != defaults.get("price"):
+                    product.base_price = defaults.get("price")
+                    prod_updates.append("base_price")
+                if prod_updates:
+                    product.save(update_fields=prod_updates)
 
             if isinstance(images_data, list) and len(images_data) > 0:
                 ProductImage.objects.filter(variant=variant).delete()

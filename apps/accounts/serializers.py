@@ -8,11 +8,15 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     """Used for /me/ and embedded in the OTP-verify response."""
+    is_staff = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ("id", "email", "phone_number", "is_staff", "is_email_verified", "created_at")
         read_only_fields = ("id", "email", "is_staff", "is_email_verified", "created_at")
+
+    def get_is_staff(self, obj):
+        return bool(obj.is_staff or getattr(obj, "is_superuser", False))
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
