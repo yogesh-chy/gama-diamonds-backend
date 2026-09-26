@@ -155,24 +155,50 @@ class ProductViewSet(viewsets.ModelViewSet):
         category = self.request.query_params.get("category")
         if category:
             cat_lower = category.lower().strip()
-            if cat_lower in ["rings", "ring"]:
-                qs = qs.filter(Q(category__in=["rings", "engagement-rings", "wedding-bands", "eternity-bands"]) | Q(category_ref__slug__in=["rings", "engagement-rings", "wedding-bands", "eternity-bands"]))
-            elif cat_lower in ["engagement-rings", "engagement", "engagement-ring"]:
-                qs = qs.filter(Q(category="engagement-rings") | Q(category_ref__slug="engagement-rings"))
+            if cat_lower in ["engagement-rings", "engagement", "engagement-ring", "rings", "ring"]:
+                qs = qs.filter(
+                    Q(category__in=["engagement-rings", "rings"]) |
+                    Q(category_ref__slug__in=["engagement-rings", "rings"]) |
+                    Q(category_ref__name__icontains="engagement")
+                )
             elif cat_lower in ["wedding-bands", "wedding", "wedding-rings", "wedding-ring"]:
-                qs = qs.filter(Q(category="wedding-bands") | Q(category_ref__slug="wedding-bands"))
+                qs = qs.filter(
+                    Q(category__in=["wedding-bands", "wedding"]) |
+                    Q(category_ref__slug__in=["wedding-bands", "wedding"]) |
+                    Q(category_ref__name__icontains="wedding")
+                )
             elif cat_lower in ["eternity-bands", "eternity", "eternity-rings", "eternity-ring"]:
-                qs = qs.filter(Q(category="eternity-bands") | Q(category_ref__slug="eternity-bands"))
+                qs = qs.filter(
+                    Q(category__in=["eternity-bands", "eternity"]) |
+                    Q(category_ref__slug__in=["eternity-bands", "eternity"]) |
+                    Q(category_ref__name__icontains="eternity")
+                )
             elif cat_lower in ["earrings", "earring"]:
-                qs = qs.filter(Q(category="earrings") | Q(category_ref__slug="earrings"))
-            elif cat_lower in ["necklaces", "necklace"]:
-                qs = qs.filter(Q(category__in=["necklaces", "pendants"]) | Q(category_ref__slug__in=["necklaces", "pendants"]))
-            elif cat_lower in ["pendants", "pendant"]:
-                qs = qs.filter(Q(category="pendants") | Q(category_ref__slug="pendants"))
-            elif cat_lower in ["bracelets", "bracelet"]:
-                qs = qs.filter(Q(category__in=["bracelets", "bangles"]) | Q(category_ref__slug__in=["bracelets", "bangles"]))
-            elif cat_lower in ["bangles", "bangle"]:
-                qs = qs.filter(Q(category="bangles") | Q(category_ref__slug="bangles"))
+                qs = qs.filter(
+                    Q(category__in=["earrings", "earring"]) |
+                    Q(category_ref__slug__in=["earrings", "earring"]) |
+                    Q(category_ref__name__icontains="earring")
+                )
+            elif cat_lower in ["necklaces", "necklace", "pendants", "pendant"]:
+                qs = qs.filter(
+                    Q(category__in=["necklaces", "necklace", "pendants", "pendant"]) |
+                    Q(category_ref__slug__in=["necklaces", "necklace", "pendants", "pendant"]) |
+                    Q(category_ref__name__icontains="necklace") |
+                    Q(category_ref__name__icontains="pendant")
+                )
+            elif cat_lower in ["bracelets", "bracelet", "bangles", "bangle"]:
+                qs = qs.filter(
+                    Q(category__in=["bracelets", "bracelet", "bangles", "bangle"]) |
+                    Q(category_ref__slug__in=["bracelets", "bracelet", "bangles", "bangle"]) |
+                    Q(category_ref__name__icontains="bracelet") |
+                    Q(category_ref__name__icontains="bangle")
+                )
+            elif cat_lower in ["jewellery", "jewelry", "other"]:
+                qs = qs.filter(
+                    Q(category__in=["jewellery", "jewelry", "other"]) |
+                    Q(category_ref__slug__in=["jewellery", "jewelry", "other"]) |
+                    Q(category_ref__name__icontains="jewellery")
+                )
             else:
                 qs = qs.filter(Q(category__iexact=category) | Q(category_ref__slug__iexact=category))
 

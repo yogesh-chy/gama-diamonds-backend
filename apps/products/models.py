@@ -127,15 +127,19 @@ class Collection(models.Model):
 
 class Product(models.Model):
     CATEGORY_CHOICES = [
-        ("rings", "Rings"),
         ("engagement-rings", "Engagement Rings"),
-        ("wedding-bands", "Wedding Bands"),
-        ("eternity-bands", "Eternity Bands"),
-        ("necklaces", "Necklaces"),
-        ("pendants", "Pendants"),
-        ("bracelets", "Bracelets"),
-        ("bangles", "Bangles"),
+        ("wedding-bands", "Wedding Rings"),
+        ("eternity-bands", "Eternity Rings"),
         ("earrings", "Earrings"),
+        ("necklaces", "Necklaces"),
+        ("bracelets", "Bracelets"),
+        ("jewellery", "Jewellery"),
+        ("rings", "Rings"),
+        ("wedding", "Wedding Rings"),
+        ("eternity", "Eternity Rings"),
+        ("necklace", "Necklace"),
+        ("pendants", "Pendants"),
+        ("bangles", "Bangles"),
         ("other", "Other Jewellery"),
     ]
 
