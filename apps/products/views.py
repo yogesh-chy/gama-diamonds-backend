@@ -206,11 +206,14 @@ class ProductViewSet(viewsets.ModelViewSet):
             s_clean = s_lower.replace("-", " ")
             style_q = (
                 Q(styles__slug__iexact=style) |
+                Q(styles__name__icontains=s_clean) |
                 Q(subcategory_ref__slug__iexact=style) |
                 Q(subcategory_ref__name__icontains=s_clean) |
                 Q(ring_style__icontains=s_clean) |
                 Q(ring_type__icontains=s_clean) |
-                Q(name__icontains=s_clean)
+                Q(earring_type__iexact=style) |
+                Q(necklace_style__iexact=style) |
+                Q(bracelet_type__iexact=style)
             )
             if s_lower in ["three-stone", "trilogy", "triology"]:
                 style_q |= Q(name__icontains="trilogy") | Q(name__icontains="three stone")

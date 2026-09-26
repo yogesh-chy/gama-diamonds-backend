@@ -173,6 +173,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
     pricing = serializers.SerializerMethodField()
     inventory = serializers.SerializerMethodField()
+    subcategory = serializers.SerializerMethodField()
     totalStock = serializers.IntegerField(source="total_stock", read_only=True)
     basePrice = serializers.DecimalField(source="base_price", max_digits=12, decimal_places=2, read_only=True)
     discountPrice = serializers.DecimalField(source="discount_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True)
@@ -191,6 +192,15 @@ class ProductListSerializer(serializers.ModelSerializer):
             "slug",
             "sku",
             "category",
+            "category_ref",
+            "subcategory_ref",
+            "subcategory",
+            "gender",
+            "ring_type",
+            "ring_style",
+            "earring_type",
+            "necklace_style",
+            "bracelet_type",
             "base_price",
             "basePrice",
             "discount_price",
@@ -219,6 +229,11 @@ class ProductListSerializer(serializers.ModelSerializer):
             "brandDetail",
             "created_at",
         ]
+
+    def get_subcategory(self, obj):
+        if obj.subcategory_ref:
+            return obj.subcategory_ref.name
+        return obj.ring_type or obj.ring_style or obj.earring_type or obj.necklace_style or obj.bracelet_type or ""
 
     def get_thumbnail(self, obj):
         first_img = obj.images.filter(is_primary=True).first() or obj.images.first()
@@ -298,6 +313,7 @@ class ProductSerializer(serializers.ModelSerializer):
     options = serializers.SerializerMethodField()
     pricing = serializers.SerializerMethodField()
     inventory = serializers.SerializerMethodField()
+    subcategory = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -310,6 +326,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "product_code",
             "internal_reference",
             "category",
+            "category_ref",
+            "subcategory_ref",
+            "subcategory",
             "base_price",
             "discount_price",
             "basePrice",
@@ -642,6 +661,70 @@ class ProductSerializer(serializers.ModelSerializer):
                 product.total_stock = calc_stock
                 product.save(update_fields=["total_stock"])
 
+    def get_subcategory(self, obj):
+        if obj.subcategory_ref:
+            return obj.subcategory_ref.name
+        return obj.ring_type or obj.ring_style or obj.earring_type or obj.necklace_style or obj.bracelet_type or ""
+
+    def _sync_taxonomy(self, product, raw_data=None):
+        raw = raw_data or {}
+        cat_slug = product.category or raw.get("category")
+        if cat_slug:
+            cat_obj = Category.objects.filter(slug__iexact=cat_slug).first() or Category.objects.filter(name__iexact=cat_slug).first()
+            if not cat_obj:
+                cat_clean = cat_slug.replace("-", " ").title()
+                cat_obj = Category.objects.filter(name__iexact=cat_clean).first()
+            if cat_obj and product.category_ref != cat_obj:
+                product.category_ref = cat_obj
+                product.save(update_fields=["category_ref"])
+
+        sub_name = (
+            raw.get("subcategory")
+            or raw.get("ring_type")
+            or raw.get("ring_style")
+            or raw.get("earring_type")
+            or raw.get("necklace_style")
+            or raw.get("bracelet_type")
+            or product.ring_type
+            or product.ring_style
+            or product.earring_type
+            or product.necklace_style
+            or product.bracelet_type
+        )
+        if sub_name:
+            sub_str = str(sub_name).strip()
+            updated_fields = []
+            if not product.ring_type:
+                product.ring_type = sub_str
+                updated_fields.append("ring_type")
+            if not product.ring_style:
+                product.ring_style = sub_str
+                updated_fields.append("ring_style")
+
+            if product.category_ref:
+                sub_slug = slugify(sub_str)
+                sub_obj = (
+                    Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
+                    or Subcategory.objects.filter(category=product.category_ref, name__iexact=sub_str).first()
+                )
+                if not sub_obj:
+                    try:
+                        sub_obj = Subcategory.objects.create(category=product.category_ref, name=sub_str, slug=sub_slug)
+                    except Exception:
+                        sub_obj = Subcategory.objects.filter(category=product.category_ref, slug__iexact=sub_slug).first()
+
+                if sub_obj and product.subcategory_ref != sub_obj:
+                    product.subcategory_ref = sub_obj
+                    updated_fields.append("subcategory_ref")
+
+            if updated_fields:
+                product.save(update_fields=updated_fields)
+
+            st_slug = slugify(sub_str)
+            style_obj = Style.objects.filter(slug__iexact=st_slug).first() or Style.objects.filter(name__iexact=sub_str).first()
+            if style_obj:
+                product.styles.add(style_obj)
+
     @transaction.atomic
     def create(self, validated_data):
         images_data = validated_data.pop("images", None)
@@ -672,6 +755,8 @@ class ProductSerializer(serializers.ModelSerializer):
         if related_products_data:
             product.related_products.set(related_products_data)
 
+        raw_req_data = self.context.get("request").data if self.context.get("request") else {}
+        self._sync_taxonomy(product, raw_req_data)
         self._sync_diamond_spec(product, diamond_spec_data)
 
         if isinstance(images_data, list):
@@ -743,6 +828,8 @@ class ProductSerializer(serializers.ModelSerializer):
         if related_products_data is not None:
             instance.related_products.set(related_products_data)
 
+        raw_req_data = self.context.get("request").data if self.context.get("request") else {}
+        self._sync_taxonomy(instance, raw_req_data)
         self._sync_diamond_spec(instance, diamond_spec_data)
 
         if images_data is not None and isinstance(images_data, list):
