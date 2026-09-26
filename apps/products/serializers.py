@@ -789,6 +789,20 @@ class ProductSerializer(serializers.ModelSerializer):
                             style_obj = Style.objects.filter(slug__iexact=st_slug).first()
                     if style_obj:
                         product.styles.add(style_obj)
+
+            extra_updates = []
+            diamond_cut_val = raw.get("diamond_cut") or raw.get("diamondCut") or raw.get("shape") or raw.get("diamond_shape")
+            if diamond_cut_val and product.diamond_cut != diamond_cut_val:
+                product.diamond_cut = diamond_cut_val
+                extra_updates.append("diamond_cut")
+
+            gender_val = raw.get("gender")
+            if gender_val and product.gender != gender_val:
+                product.gender = gender_val
+                extra_updates.append("gender")
+
+            if extra_updates:
+                product.save(update_fields=extra_updates)
         except Exception:
             pass
 
