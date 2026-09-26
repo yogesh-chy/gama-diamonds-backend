@@ -166,6 +166,8 @@ class DiamondSpecificationSerializer(serializers.ModelSerializer):
 class ProductListSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
+    diamond_spec = DiamondSpecificationSerializer(read_only=True)
+    diamondSpec = DiamondSpecificationSerializer(source="diamond_spec", read_only=True)
     thumbnail = serializers.SerializerMethodField()
     secondaryImage = serializers.SerializerMethodField()
     price = serializers.SerializerMethodField()
@@ -174,6 +176,9 @@ class ProductListSerializer(serializers.ModelSerializer):
     totalStock = serializers.IntegerField(source="total_stock", read_only=True)
     basePrice = serializers.DecimalField(source="base_price", max_digits=12, decimal_places=2, read_only=True)
     discountPrice = serializers.DecimalField(source="discount_price", max_digits=12, decimal_places=2, read_only=True, allow_null=True)
+    metalType = serializers.CharField(source="metal_type", read_only=True)
+    metalKarat = serializers.CharField(source="metal_karat", read_only=True)
+    diamondCut = serializers.CharField(source="diamond_cut", read_only=True)
     available = serializers.BooleanField(source="is_available", read_only=True)
     diamondTypeDetail = DiamondTypeSerializer(source="diamond_type", read_only=True)
     brandDetail = BrandSerializer(source="brand", read_only=True)
@@ -193,6 +198,14 @@ class ProductListSerializer(serializers.ModelSerializer):
             "total_stock",
             "totalStock",
             "inventory",
+            "metal_type",
+            "metalType",
+            "metal_karat",
+            "metalKarat",
+            "diamond_cut",
+            "diamondCut",
+            "diamond_spec",
+            "diamondSpec",
             "images",
             "variants",
             "thumbnail",
@@ -459,7 +472,49 @@ class ProductSerializer(serializers.ModelSerializer):
     def _sync_diamond_spec(self, product, diamond_spec_data):
         if diamond_spec_data is None:
             return
-        DiamondSpecification.objects.update_or_create(product=product, defaults=diamond_spec_data)
+        
+        valid_fields = {
+            "diamond_origin", "diamond_shape", "carat_weight",
+            "center_carat_weight", "side_carat_weight", "total_carat_weight",
+            "number_of_diamonds", "cut_grade", "colour_grade", "clarity_grade",
+            "polish", "symmetry", "fluorescence", "certification_lab",
+            "certificate_number", "certificate_url"
+        }
+        cleaned_data = {}
+        for k, v in diamond_spec_data.items():
+            snake_k = k
+            if k == "diamondOrigin": snake_k = "diamond_origin"
+            elif k == "diamondShape": snake_k = "diamond_shape"
+            elif k == "caratWeight": snake_k = "carat_weight"
+            elif k == "centerCaratWeight": snake_k = "center_carat_weight"
+            elif k == "sideCaratWeight": snake_k = "side_carat_weight"
+            elif k == "totalCaratWeight": snake_k = "total_carat_weight"
+            elif k == "numberOfDiamonds": snake_k = "number_of_diamonds"
+            elif k == "cutGrade": snake_k = "cut_grade"
+            elif k == "colourGrade": snake_k = "colour_grade"
+            elif k == "clarityGrade": snake_k = "clarity_grade"
+            elif k == "certificationLab": snake_k = "certification_lab"
+            elif k == "certificateNumber": snake_k = "certificate_number"
+            elif k == "certificateUrl": snake_k = "certificate_url"
+
+            if snake_k in valid_fields and v is not None:
+                cleaned_data[snake_k] = v
+
+        if not cleaned_data.get("carat_weight") and cleaned_data.get("total_carat_weight"):
+            cleaned_data["carat_weight"] = cleaned_data["total_carat_weight"]
+        elif not cleaned_data.get("carat_weight"):
+            cleaned_data["carat_weight"] = 1.0
+
+        DiamondSpecification.objects.update_or_create(product=product, defaults=cleaned_data)
+
+        # Automatically align product.diamond_type if specified
+        origin = cleaned_data.get("diamond_origin")
+        if origin and not product.diamond_type:
+            target_name = "Natural" if origin == "natural" else "Lab-Grown"
+            dt = DiamondType.objects.filter(name__iexact=target_name).first()
+            if dt:
+                product.diamond_type = dt
+                product.save(update_fields=["diamond_type"])
 
     def _sync_variants(self, product, variants_data):
         if variants_data is None:
