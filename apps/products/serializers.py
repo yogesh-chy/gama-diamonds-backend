@@ -276,6 +276,7 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    category = serializers.CharField(required=False, allow_blank=True)
     images = ProductImageSerializer(many=True, required=False)
     variants = ProductVariantSerializer(many=True, required=False)
     sizes = ProductSizeSerializer(many=True, required=False)

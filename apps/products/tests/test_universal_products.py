@@ -4,7 +4,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from accounts.models import User
-from products.models import Product, ProductVariant, Category, DiamondSpecification, Style, DiamondType
+from products.models import Product, ProductVariant, Category, Subcategory, DiamondSpecification, Style, DiamondType
+from products.serializers import ProductSerializer
 
 
 @pytest.fixture
@@ -26,6 +27,27 @@ def categories(db):
 
 @pytest.mark.django_db
 class TestUniversalProductSystem:
+    def test_create_product_with_custom_navigation_taxonomy(self):
+        category = Category.objects.create(name="Custom Navigation", slug="custom-navigation")
+        subcategory = Subcategory.objects.create(category=category, name="Women's Plain", slug="womens-plain")
+        payload = {
+            "name": "Plain Wedding Ring",
+            "sku": "PLAIN-WED-001",
+            "category": category.slug,
+            "category_ref": category.id,
+            "subcategory": subcategory.name,
+            "subcategory_ref": subcategory.id,
+            "base_price": 1500,
+        }
+
+        serializer = ProductSerializer(data=payload)
+        assert serializer.is_valid(), serializer.errors
+        product = serializer.save()
+
+        assert product.category == category.slug
+        assert product.category_ref == category
+        assert product.subcategory_ref == subcategory
+
     def test_create_engagement_ring_with_9_variants(self, admin_client, categories):
         payload = {
             "name": "Classic Solitaire Engagement Ring",
