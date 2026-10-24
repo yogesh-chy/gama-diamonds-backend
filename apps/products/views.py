@@ -86,9 +86,11 @@ class MediaUploadView(APIView):
             for chunk in file_obj.chunks():
                 destination.write(chunk)
 
-        media_url = f"{settings.MEDIA_URL.rstrip('/')}/uploads/{unique_name}"
-        if not media_url.startswith('/'):
-            media_url = '/' + media_url
+        # Build an absolute URL so the frontend (on a different origin) can load it
+        media_path = f"{settings.MEDIA_URL.rstrip('/')}/uploads/{unique_name}"
+        if not media_path.startswith('/'):
+            media_path = '/' + media_path
+        media_url = request.build_absolute_uri(media_path)
 
         return Response({
             "success": True,

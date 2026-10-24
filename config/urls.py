@@ -17,6 +17,9 @@ def root_view(request):
         "health": "/health/"
     })
 
+from django.views.static import serve
+from django.urls import re_path
+
 urlpatterns = [
     path("", root_view, name="api-root"),
     path("api/", root_view, name="api-index"),
@@ -32,5 +35,8 @@ urlpatterns = [
     # OpenAPI / Swagger docs (FR: drf-spectacular)
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+
+    # Direct media file serving (handles local disk uploads across dev and prod)
+    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
