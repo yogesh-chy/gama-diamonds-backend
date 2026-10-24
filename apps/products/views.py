@@ -159,19 +159,24 @@ class ProductViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(
                     Q(category__in=["engagement-rings", "rings"]) |
                     Q(category_ref__slug__in=["engagement-rings", "rings"]) |
-                    Q(category_ref__name__icontains="engagement")
+                    Q(category_ref__name__icontains="engagement") |
+                    Q(category_ref__name__iexact="rings")
                 )
             elif cat_lower in ["wedding-bands", "wedding", "wedding-rings", "wedding-ring"]:
                 qs = qs.filter(
-                    Q(category__in=["wedding-bands", "wedding"]) |
-                    Q(category_ref__slug__in=["wedding-bands", "wedding"]) |
+                    Q(category__in=["wedding-bands", "wedding-rings", "wedding"]) |
+                    Q(category_ref__slug__in=["wedding-bands", "wedding-rings", "wedding"]) |
                     Q(category_ref__name__icontains="wedding")
                 )
             elif cat_lower in ["eternity-bands", "eternity", "eternity-rings", "eternity-ring"]:
                 qs = qs.filter(
-                    Q(category__in=["eternity-bands", "eternity"]) |
-                    Q(category_ref__slug__in=["eternity-bands", "eternity"]) |
-                    Q(category_ref__name__icontains="eternity")
+                    Q(category__in=["eternity-bands", "eternity-rings", "eternity"]) |
+                    Q(category_ref__slug__in=["eternity-bands", "eternity-rings", "eternity"]) |
+                    Q(category_ref__name__icontains="eternity") |
+                    Q(subcategory_ref__slug__icontains="eternity") |
+                    Q(subcategory_ref__name__icontains="eternity") |
+                    Q(ring_type__icontains="eternity") |
+                    Q(ring_style__icontains="eternity")
                 )
             elif cat_lower in ["earrings", "earring"]:
                 qs = qs.filter(
@@ -197,7 +202,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(
                     Q(category__in=["jewellery", "jewelry", "other"]) |
                     Q(category_ref__slug__in=["jewellery", "jewelry", "other"]) |
-                    Q(category_ref__name__icontains="jewellery")
+                    Q(category_ref__name__icontains="jewellery") |
+                    Q(category_ref__name__icontains="jewelry")
                 )
             else:
                 qs = qs.filter(Q(category__iexact=category) | Q(category_ref__slug__iexact=category))
@@ -224,7 +230,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         shape = self.request.query_params.get("shape") or self.request.query_params.get("diamond_cut") or self.request.query_params.get("diamond_shape")
         if shape:
             s_clean = shape.lower().replace("-cut", "").replace("-brilliant", "").replace("-shape", "").strip()
-            qs = qs.filter(Q(diamond_cut__iexact=shape) | Q(diamond_cut__iexact=s_clean) | Q(diamond_cut__icontains=s_clean) | Q(name__icontains=s_clean))
+            qs = qs.filter(
+                Q(diamond_cut__iexact=shape) |
+                Q(diamond_cut__iexact=s_clean) |
+                Q(diamond_cut__icontains=s_clean) |
+                Q(diamond_spec__diamond_shape__iexact=shape) |
+                Q(diamond_spec__diamond_shape__icontains=s_clean) |
+                Q(name__icontains=s_clean)
+            )
 
         style = self.request.query_params.get("style")
         if style:
@@ -237,6 +250,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 Q(subcategory_ref__name__icontains=s_clean) |
                 Q(ring_style__icontains=s_clean) |
                 Q(ring_type__icontains=s_clean) |
+                Q(ring_profile__icontains=s_clean) |
                 Q(earring_type__iexact=style) |
                 Q(necklace_style__iexact=style) |
                 Q(bracelet_type__iexact=style)
@@ -284,11 +298,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         subcategory = self.request.query_params.get("subcategory")
         if subcategory:
             sub_clean = subcategory.lower().replace("-", " ")
-            qs = qs.filter(
+            sub_lower = subcategory.lower().strip()
+            sub_q = (
                 Q(subcategory_ref__slug__iexact=subcategory) |
                 Q(subcategory_ref__name__icontains=sub_clean) |
                 Q(ring_type__icontains=sub_clean) |
                 Q(ring_style__icontains=sub_clean) |
+                Q(ring_profile__icontains=sub_clean) |
                 Q(earring_type__iexact=subcategory) |
                 Q(earring_style__icontains=sub_clean) |
                 Q(necklace_style__iexact=subcategory) |
@@ -296,8 +312,32 @@ class ProductViewSet(viewsets.ModelViewSet):
                 Q(bracelet_type__iexact=subcategory) |
                 Q(bracelet_style__icontains=sub_clean) |
                 Q(styles__slug__iexact=subcategory) |
+                Q(styles__name__icontains=sub_clean) |
                 Q(diamond_cut__iexact=subcategory)
             )
+            if sub_lower in ["solitaire-studs", "studs", "stud"]:
+                sub_q |= Q(earring_type__icontains="stud") | Q(name__icontains="stud")
+            elif sub_lower in ["hoop-earrings", "hoops", "hoop"]:
+                sub_q |= Q(earring_type__icontains="hoop") | Q(name__icontains="hoop")
+            elif sub_lower in ["tennis-bracelets", "tennis"]:
+                sub_q |= Q(bracelet_type__icontains="tennis") | Q(name__icontains="tennis")
+            elif sub_lower in ["heart-pendants", "heart"]:
+                sub_q |= Q(pendant_shape__icontains="heart") | Q(name__icontains="heart")
+            elif sub_lower in ["cross-pendants", "cross"]:
+                sub_q |= Q(pendant_shape__icontains="cross") | Q(name__icontains="cross")
+            elif sub_lower in ["plain", "mens-plain", "womens-plain"]:
+                sub_q |= Q(ring_style__icontains="plain") | Q(name__icontains="plain")
+            elif sub_lower in ["eternity", "eternity-rings"]:
+                sub_q |= Q(category__icontains="eternity") | Q(name__icontains="eternity") | Q(ring_type__icontains="eternity")
+            elif sub_lower in ["statement-rings", "statement"]:
+                sub_q |= Q(ring_type__icontains="statement") | Q(name__icontains="statement")
+            elif sub_lower in ["gold-colour", "gold"]:
+                sub_q |= Q(metal_type__icontains="yellow") | Q(variants__metal_type__icontains="yellow") | Q(name__icontains="yellow gold")
+            elif sub_lower in ["silver-colour", "silver", "white-gold"]:
+                sub_q |= Q(metal_type__icontains="white") | Q(metal_type__icontains="silver") | Q(metal_type__icontains="platinum") | Q(variants__metal_type__icontains="white") | Q(variants__metal_type__icontains="silver") | Q(variants__metal_type__icontains="platinum")
+            elif sub_lower in ["rose-gold"]:
+                sub_q |= Q(metal_type__icontains="rose") | Q(variants__metal_type__icontains="rose")
+            qs = qs.filter(sub_q)
 
         search = self.request.query_params.get("search")
         if search:

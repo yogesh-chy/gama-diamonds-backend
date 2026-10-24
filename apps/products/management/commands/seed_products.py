@@ -3,23 +3,137 @@ from products.models import Category, Subcategory, Product, ProductImage, Produc
 
 
 class Command(BaseCommand):
-    help = "Seeds initial sample jewellery products into the database"
+    help = "Seeds initial sample jewellery categories, subcategories, and products into the database"
 
     def handle(self, *args, **options):
         self.stdout.write("Seeding categories and products...")
 
-        # Create Categories
-        rings_cat, _ = Category.objects.get_or_create(name="Rings")
-        necklaces_cat, _ = Category.objects.get_or_create(name="Necklaces")
-        bracelets_cat, _ = Category.objects.get_or_create(name="Bracelets")
-        earrings_cat, _ = Category.objects.get_or_create(name="Earrings")
+        # 1. Main 7 Categories and Subcategories
+        category_data = [
+            {
+                "name": "Engagement Rings",
+                "slug": "engagement-rings",
+                "subcategories": [
+                    ("Solitaire", "solitaire"),
+                    ("Halo", "halo"),
+                    ("Under Halo", "under-halo"),
+                    ("Diamond Shoulder", "diamond-shoulder"),
+                    ("Trilogy Three Stone", "three-stone"),
+                    ("Matching Set", "matching-set"),
+                ],
+            },
+            {
+                "name": "Wedding Rings",
+                "slug": "wedding-rings",
+                "subcategories": [
+                    ("Women's Plain", "womens-plain"),
+                    ("Eternity Rings", "eternity-rings"),
+                    ("Men's Plain", "mens-plain"),
+                    ("Men's Diamond", "mens-diamond"),
+                    ("Men's Pattern", "mens-pattern"),
+                    ("Traditional Court", "traditional-court"),
+                    ("Flat Court", "flat-court"),
+                    ("Soft Court", "soft-court"),
+                ],
+            },
+            {
+                "name": "Eternity Rings",
+                "slug": "eternity-rings",
+                "subcategories": [
+                    ("Full Eternity", "full-eternity"),
+                    ("Half Eternity", "half-eternity"),
+                    ("Seven Stone", "seven-stone"),
+                    ("Micro-Pave", "micro-pave"),
+                ],
+            },
+            {
+                "name": "Earrings",
+                "slug": "earrings",
+                "subcategories": [
+                    ("Solitaire Studs", "solitaire-studs"),
+                    ("Hoop Earrings", "hoop-earrings"),
+                    ("Drop Earrings", "drop-earrings"),
+                    ("Halo Earrings", "halo-earrings"),
+                    ("Chandelier Earrings", "chandelier-earrings"),
+                ],
+            },
+            {
+                "name": "Necklace",
+                "slug": "necklaces",
+                "subcategories": [
+                    ("Pendants", "pendants"),
+                    ("Heart Pendants", "heart-pendants"),
+                    ("Cross Pendants", "cross-pendants"),
+                    ("Tennis Necklaces", "tennis-necklaces"),
+                    ("Chains", "chains"),
+                ],
+            },
+            {
+                "name": "Bracelets",
+                "slug": "bracelets",
+                "subcategories": [
+                    ("Tennis Bracelets", "tennis-bracelets"),
+                    ("Bangles", "bangles"),
+                    ("Cuff Bracelets", "cuff-bracelets"),
+                    ("Chain Bracelets", "chain-bracelets"),
+                ],
+            },
+            {
+                "name": "Jewellery",
+                "slug": "jewellery",
+                "subcategories": [
+                    ("Statement Rings", "statement-rings"),
+                    ("Gold Colour", "gold-colour"),
+                    ("Silver Colour", "silver-colour"),
+                    ("Rose Gold", "rose-gold"),
+                    ("The Classics", "the-classics"),
+                    ("Hot Diamonds", "hot-diamonds"),
+                ],
+            },
+        ]
+
+        cat_map = {}
+        sub_map = {}
+
+        for item in category_data:
+            cat = Category.objects.filter(slug=item["slug"]).first() or Category.objects.filter(name=item["name"]).first()
+            if not cat:
+                cat = Category.objects.create(name=item["name"], slug=item["slug"])
+            else:
+                cat.name = item["name"]
+                cat.slug = item["slug"]
+                cat.save()
+            cat_map[item["slug"]] = cat
+
+            for sub_name, sub_slug in item["subcategories"]:
+                sub = Subcategory.objects.filter(category=cat, slug=sub_slug).first()
+                if not sub:
+                    sub = Subcategory.objects.create(category=cat, name=sub_name, slug=sub_slug)
+                sub_map[f"{item['slug']}:{sub_slug}"] = sub
+
+        # Styles
+        styles_list = [
+            ("Solitaire", "solitaire"),
+            ("Halo", "halo"),
+            ("Under Halo", "under-halo"),
+            ("Diamond Shoulder", "diamond-shoulder"),
+            ("Trilogy Three Stone", "three-stone"),
+            ("Matching Set", "matching-set"),
+            ("Traditional Court", "traditional-court"),
+            ("Flat Court", "flat-court"),
+            ("Soft Court", "soft-court"),
+        ]
+        for s_name, s_slug in styles_list:
+            Style.objects.get_or_create(name=s_name, defaults={"slug": s_slug})
 
         # Sample Products
         sample_products = [
           {
             "name": "Classic Solitaire Diamond Ring",
-            "category": "rings",
-            "category_ref": rings_cat,
+            "category": "engagement-rings",
+            "category_ref": cat_map.get("engagement-rings"),
+            "subcategory_ref": sub_map.get("engagement-rings:solitaire"),
+            "ring_style": "Solitaire",
             "description": "Exquisite 1.5 Carat Solitaire Engagement Ring set in 18ct White Gold.",
             "base_price": 250000.00,
             "discount_price": 225000.00,
@@ -36,8 +150,10 @@ class Command(BaseCommand):
           },
           {
             "name": "Emerald Cut Halo Ring",
-            "category": "rings",
-            "category_ref": rings_cat,
+            "category": "engagement-rings",
+            "category_ref": cat_map.get("engagement-rings"),
+            "subcategory_ref": sub_map.get("engagement-rings:halo"),
+            "ring_style": "Halo",
             "description": "Stunning Emerald Cut Diamond Ring with pave halo border.",
             "base_price": 320000.00,
             "discount_price": None,
@@ -55,7 +171,8 @@ class Command(BaseCommand):
           {
             "name": "Diamond Solitaire Stud Earrings",
             "category": "earrings",
-            "category_ref": earrings_cat,
+            "category_ref": cat_map.get("earrings"),
+            "subcategory_ref": sub_map.get("earrings:solitaire-studs"),
             "description": "Timeless 1.0 Carat total weight diamond stud earrings in Platinum.",
             "base_price": 180000.00,
             "discount_price": 165000.00,
@@ -73,7 +190,8 @@ class Command(BaseCommand):
           {
             "name": "Diamond Tennis Bracelet",
             "category": "bracelets",
-            "category_ref": bracelets_cat,
+            "category_ref": cat_map.get("bracelets"),
+            "subcategory_ref": sub_map.get("bracelets:tennis-bracelets"),
             "description": "Elegant 5.0 Carat Diamond Tennis Bracelet crafted in 18ct White Gold.",
             "base_price": 450000.00,
             "discount_price": None,
@@ -107,4 +225,4 @@ class Command(BaseCommand):
                     styles = [Style.objects.get_or_create(name=n)[0] for n in style_names]
                     product.styles.set(styles)
 
-        self.stdout.write(self.style.SUCCESS(f"Successfully seeded {created_count} products."))
+        self.stdout.write(self.style.SUCCESS(f"Successfully seeded categories, subcategories, and {created_count} products."))
