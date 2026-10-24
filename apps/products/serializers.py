@@ -18,6 +18,7 @@ from .models import (
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    url = serializers.CharField(required=True)
     publicId = serializers.CharField(source="public_id", required=False, allow_blank=True)
     isPrimary = serializers.BooleanField(source="is_primary", required=False, default=False)
     variantId = serializers.IntegerField(source="variant_id", required=False, allow_null=True)
@@ -25,6 +26,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
         fields = ["id", "url", "publicId", "isPrimary", "variantId"]
+
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):

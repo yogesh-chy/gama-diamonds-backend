@@ -334,10 +334,10 @@ class Product(models.Model):
     seo_title = models.CharField(max_length=255, blank=True, default="")
     seo_description = models.TextField(blank=True, default="")
     seo_keywords = models.CharField(max_length=255, blank=True, default="")
-    canonical_url = models.URLField(max_length=500, blank=True, default="")
+    canonical_url = models.CharField(max_length=500, blank=True, default="")
     og_title = models.CharField(max_length=255, blank=True, default="")
     og_description = models.TextField(blank=True, default="")
-    og_image = models.URLField(max_length=1000, blank=True, default="")
+    og_image = models.CharField(max_length=1000, blank=True, default="")
 
     related_products = models.ManyToManyField("self", symmetrical=False, blank=True)
 
@@ -458,7 +458,7 @@ class ProductVariant(models.Model):
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, related_name="images", on_delete=models.CASCADE)
     variant = models.ForeignKey(ProductVariant, related_name="images", on_delete=models.CASCADE, null=True, blank=True)
-    url = models.URLField(max_length=1000)
+    url = models.CharField(max_length=1000)
     public_id = models.CharField(max_length=255, blank=True, default="")
     is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -492,7 +492,7 @@ class DiamondSpecification(models.Model):
         ("I1", "I1"), ("I2", "I2"), ("I3", "I3"),
     ]
     CERT_LAB_CHOICES = [
-        ("GIA", "GIA"), ("IGI", "IGI"), ("none", "Uncertified"),
+        ("GIA", "GIA"), ("IGI", "IGI"), ("HRD", "HRD"), ("EGL", "EGL"), ("AGS", "AGS"), ("none", "Uncertified"),
     ]
     DIAMOND_ORIGIN_CHOICES = [
         ("lab_grown", "Lab Grown"),
@@ -518,7 +518,7 @@ class DiamondSpecification(models.Model):
 
     certification_lab = models.CharField(max_length=10, choices=CERT_LAB_CHOICES, default="none")
     certificate_number = models.CharField(max_length=100, blank=True, default="")
-    certificate_url = models.URLField(max_length=1000, blank=True, default="")
+    certificate_url = models.CharField(max_length=1000, blank=True, default="")
 
     def __str__(self):
         return f"{self.carat_weight}ct {self.cut_grade or ''} — {self.product.name}"
