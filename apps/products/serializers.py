@@ -809,6 +809,27 @@ class ProductSerializer(serializers.ModelSerializer):
         except Exception:
             pass
 
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            if hasattr(data, "copy"):
+                data = data.copy()
+            else:
+                data = dict(data)
+            nullable_char_fields = [
+                "pendant_shape", "pendant_type", "pendant_height", "pendant_width", "pendant_depth",
+                "pendant_included", "chain_included", "chain_type", "chain_length", "necklace_type",
+                "clasp_type", "ring_type", "ring_style", "ring_shape", "band_style", "band_width",
+                "ring_profile", "ring_finish", "ring_thickness", "earring_style", "closure_type",
+                "drop_length", "earring_width", "earring_height", "bracelet_style", "bracelet_length",
+                "bracelet_width", "bracelet_thickness", "bangle_type", "inner_diameter", "bangle_width",
+                "bangle_thickness", "opening_type", "bangle_size", "adjustable", "resizable",
+                "customisation_available", "engraving_available", "diamond_cut"
+            ]
+            for field in nullable_char_fields:
+                if field in data and data[field] is None:
+                    data[field] = ""
+        return super().to_internal_value(data)
+
     @transaction.atomic
     def create(self, validated_data):
         images_data = validated_data.pop("images", None)
