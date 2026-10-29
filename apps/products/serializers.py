@@ -306,8 +306,18 @@ class ProductSerializer(serializers.ModelSerializer):
     necklaceStyle = serializers.CharField(source="necklace_style", required=False, allow_null=True, allow_blank=True)
     braceletType = serializers.CharField(source="bracelet_type", required=False, allow_null=True, allow_blank=True)
     bandFit = serializers.CharField(source="band_fit", required=False, allow_null=True, allow_blank=True)
-    customisationAvailable = serializers.CharField(source="customisation_available", required=False)
-    engravingAvailable = serializers.CharField(source="engraving_available", required=False)
+    customisationAvailable = serializers.CharField(source="customisation_available", required=False, allow_blank=True, allow_null=True)
+    engravingAvailable = serializers.CharField(source="engraving_available", required=False, allow_blank=True, allow_null=True)
+    adjustable = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    resizable = serializers.CharField(required=False, default="yes", allow_blank=True, allow_null=True)
+    pendant_included = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    chain_included = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    gemstone_included = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    customisation_available = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    engraving_available = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    personalisation_available = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    next_day_delivery_available = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
+    made_to_order = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
     videoUrl = serializers.CharField(source="video_url", required=False, allow_blank=True, allow_null=True)
 
     seoTitle = serializers.CharField(source="seo_title", required=False, allow_blank=True)
@@ -815,15 +825,65 @@ class ProductSerializer(serializers.ModelSerializer):
                 data = data.copy()
             else:
                 data = dict(data)
+
+            # 1. Normalize availability choices (must be 'yes', 'no', or 'on_request')
+            availability_fields = {
+                "resizable": "yes",
+                "adjustable": "no",
+                "pendant_included": "no",
+                "chain_included": "no",
+                "gemstone_included": "no",
+                "customisation_available": "no",
+                "engraving_available": "no",
+                "personalisation_available": "no",
+                "next_day_delivery_available": "no",
+                "made_to_order": "no",
+            }
+            for field_name, default_val in availability_fields.items():
+                if field_name in data:
+                    raw_val = data[field_name]
+                    if raw_val is None or (isinstance(raw_val, str) and raw_val.strip() == ""):
+                        data[field_name] = default_val
+                    elif isinstance(raw_val, bool):
+                        data[field_name] = "yes" if raw_val else "no"
+                    elif isinstance(raw_val, str):
+                        clean_val = raw_val.strip().lower()
+                        if clean_val in ["yes", "true", "1"]:
+                            data[field_name] = "yes"
+                        elif clean_val in ["on_request", "request", "on-request"]:
+                            data[field_name] = "on_request"
+                        elif clean_val in ["no", "false", "0"]:
+                            data[field_name] = "no"
+                        else:
+                            data[field_name] = default_val
+
+            # 2. Optional choices with null=True: empty string -> None
+            optional_choice_fields = [
+                "band_fit", "earring_type", "necklace_style", "bracelet_type",
+                "metal_type", "metal_karat", "diamond_cut"
+            ]
+            for field_name in optional_choice_fields:
+                if field_name in data and (data[field_name] is None or data[field_name] in ["", "none", "null"]):
+                    data[field_name] = None
+
+            # 3. Gender normalization
+            if "gender" in data:
+                raw_gender = str(data.get("gender") or "").strip().lower()
+                if raw_gender not in ["women", "men", "unisex"]:
+                    data["gender"] = "women"
+                else:
+                    data["gender"] = raw_gender
+
+            # 4. Pure CharFields that must never be null
             nullable_char_fields = [
                 "pendant_shape", "pendant_type", "pendant_height", "pendant_width", "pendant_depth",
-                "pendant_included", "chain_included", "chain_type", "chain_length", "necklace_type",
-                "clasp_type", "ring_type", "ring_style", "ring_shape", "band_style", "band_width",
+                "chain_type", "chain_length", "necklace_type", "clasp_type",
+                "ring_type", "ring_style", "ring_shape", "band_style", "band_width",
                 "ring_profile", "ring_finish", "ring_thickness", "earring_style", "closure_type",
                 "drop_length", "earring_width", "earring_height", "bracelet_style", "bracelet_length",
                 "bracelet_width", "bracelet_thickness", "bangle_type", "inner_diameter", "bangle_width",
-                "bangle_thickness", "opening_type", "bangle_size", "adjustable", "resizable",
-                "customisation_available", "engraving_available", "diamond_cut"
+                "bangle_thickness", "opening_type", "bangle_size", "engraving_instructions",
+                "delivery_type", "estimated_delivery_time", "production_time", "finish"
             ]
             for field in nullable_char_fields:
                 if field in data and data[field] is None:
