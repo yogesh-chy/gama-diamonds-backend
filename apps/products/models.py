@@ -298,6 +298,31 @@ class Product(models.Model):
     thickness = models.CharField(max_length=30, blank=True, default="")
     weight = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
 
+    # Extended Jewellery-Specific Dimensions
+    ring_size = models.CharField(max_length=50, blank=True, default="")
+    inner_circumference = models.CharField(max_length=30, blank=True, default="")
+    top_height = models.CharField(max_length=30, blank=True, default="")
+    setting_height = models.CharField(max_length=30, blank=True, default="")
+    center_stone_length = models.CharField(max_length=30, blank=True, default="")
+    center_stone_width = models.CharField(max_length=30, blank=True, default="")
+    center_stone_depth = models.CharField(max_length=30, blank=True, default="")
+
+    chain_width = models.CharField(max_length=30, blank=True, default="")
+    chain_thickness = models.CharField(max_length=30, blank=True, default="")
+    extension_length = models.CharField(max_length=30, blank=True, default="")
+    clasp_dimensions = models.CharField(max_length=50, blank=True, default="")
+
+    link_length = models.CharField(max_length=30, blank=True, default="")
+    link_width = models.CharField(max_length=30, blank=True, default="")
+    charm_height = models.CharField(max_length=30, blank=True, default="")
+    charm_width = models.CharField(max_length=30, blank=True, default="")
+
+    earring_depth = models.CharField(max_length=30, blank=True, default="")
+    outer_diameter = models.CharField(max_length=30, blank=True, default="")
+    post_length = models.CharField(max_length=30, blank=True, default="")
+    post_thickness = models.CharField(max_length=30, blank=True, default="")
+    backing_dimensions = models.CharField(max_length=50, blank=True, default="")
+
     # General Attributes
     finish = models.CharField(max_length=30, blank=True, default="")
     customisation_available = models.CharField(max_length=20, choices=AVAILABILITY_CHOICES, default="no")

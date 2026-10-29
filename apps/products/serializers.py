@@ -1,3 +1,4 @@
+import re
 import uuid
 from django.db import transaction
 from django.utils.text import slugify
@@ -202,6 +203,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             "gender",
             "ring_type",
             "ring_style",
+            "ring_profile",
             "earring_type",
             "necklace_style",
             "bracelet_type",
@@ -428,6 +430,27 @@ class ProductSerializer(serializers.ModelSerializer):
             "depth",
             "thickness",
             "weight",
+            # Extended dynamic jewellery dimensions
+            "ring_size",
+            "inner_circumference",
+            "top_height",
+            "setting_height",
+            "center_stone_length",
+            "center_stone_width",
+            "center_stone_depth",
+            "chain_width",
+            "chain_thickness",
+            "extension_length",
+            "clasp_dimensions",
+            "link_length",
+            "link_width",
+            "charm_height",
+            "charm_width",
+            "earring_depth",
+            "outer_diameter",
+            "post_length",
+            "post_thickness",
+            "backing_dimensions",
             # Customisation & Shipping
             "finish",
             "customisation_available",
@@ -771,6 +794,9 @@ class ProductSerializer(serializers.ModelSerializer):
                     if not product.ring_style:
                         product.ring_style = sub_str
                         updated_fields.append("ring_style")
+                    if any(court in sub_str.lower() for court in ["court", "plain"]) and not product.ring_profile:
+                        product.ring_profile = sub_str
+                        updated_fields.append("ring_profile")
 
                 if product.category_ref:
                     sub_slug = slugify(sub_str)
@@ -883,11 +909,90 @@ class ProductSerializer(serializers.ModelSerializer):
                 "drop_length", "earring_width", "earring_height", "bracelet_style", "bracelet_length",
                 "bracelet_width", "bracelet_thickness", "bangle_type", "inner_diameter", "bangle_width",
                 "bangle_thickness", "opening_type", "bangle_size", "engraving_instructions",
-                "delivery_type", "estimated_delivery_time", "production_time", "finish"
+                "delivery_type", "estimated_delivery_time", "production_time", "finish",
+                "ring_size", "inner_circumference", "top_height", "setting_height",
+                "center_stone_length", "center_stone_width", "center_stone_depth",
+                "chain_width", "chain_thickness", "extension_length", "clasp_dimensions",
+                "link_length", "link_width", "charm_height", "charm_width",
+                "earring_depth", "outer_diameter", "post_length", "post_thickness",
+                "backing_dimensions", "height", "width", "length", "depth", "thickness"
             ]
             for field in nullable_char_fields:
                 if field in data and data[field] is None:
                     data[field] = ""
+
+            # 5. Validate measurements are non-negative
+            numeric_dimension_keys = [
+                "inner_diameter", "inner_circumference", "top_height", "setting_height",
+                "center_stone_length", "center_stone_width", "center_stone_depth",
+                "band_width", "ring_thickness",
+                "chain_width", "chain_thickness",
+                "pendant_height", "pendant_width", "pendant_depth",
+                "bracelet_width", "bracelet_thickness",
+                "bangle_width", "bangle_thickness", "link_length", "link_width",
+                "charm_height", "charm_width",
+                "earring_height", "earring_width", "earring_depth", "drop_length",
+                "outer_diameter", "post_length", "post_thickness",
+                "height", "width", "length", "depth", "thickness"
+            ]
+            for dk in numeric_dimension_keys:
+                if dk in data and data[dk] not in [None, ""]:
+                    raw_str = str(data[dk]).strip()
+                    if re.search(r"-\s*\d+", raw_str):
+                        raise serializers.ValidationError({dk: "Measurement must be a positive number."})
+
+            # 6. Clear stale dimension fields from incompatible categories
+            cat_val = str(data.get("category") or "").lower()
+            if self.instance and not cat_val:
+                cat_val = str(self.instance.category or "").lower()
+
+            if cat_val:
+                is_ring = any(k in cat_val for k in ["ring", "wedding", "eternity"])
+                is_earring = "earring" in cat_val
+                is_necklace = "necklace" in cat_val or "pendant" in cat_val
+                is_bracelet = "bracelet" in cat_val or "bangle" in cat_val
+
+                ring_only_fields = [
+                    "ring_size", "band_width", "ring_thickness", "top_height", "setting_height",
+                    "center_stone_length", "center_stone_width", "center_stone_depth", "band_fit",
+                    "ring_profile", "ring_finish", "ring_type", "ring_style", "ring_shape", "band_style"
+                ]
+                necklace_only_fields = [
+                    "chain_type", "chain_length", "chain_width", "chain_thickness",
+                    "pendant_type", "pendant_shape", "pendant_height", "pendant_width", "pendant_depth",
+                    "pendant_included", "chain_included"
+                ]
+                bracelet_only_fields = [
+                    "bracelet_type", "bracelet_style", "bracelet_length", "bracelet_width", "bracelet_thickness",
+                    "bangle_type", "bangle_width", "bangle_thickness", "bangle_size", "opening_type",
+                    "link_length", "link_width", "charm_height", "charm_width"
+                ]
+                earring_only_fields = [
+                    "earring_type", "earring_style", "closure_type", "drop_length",
+                    "earring_width", "earring_height", "earring_depth", "outer_diameter",
+                    "post_length", "post_thickness", "backing_dimensions"
+                ]
+
+                if is_ring:
+                    for f in necklace_only_fields + bracelet_only_fields + earring_only_fields:
+                        if f in data:
+                            data[f] = "" if f not in ["pendant_included", "chain_included"] else "no"
+                elif is_necklace:
+                    for f in ring_only_fields + bracelet_only_fields + earring_only_fields:
+                        if f in data:
+                            data[f] = "" if f not in ["pendant_included", "chain_included"] else "no"
+                    if str(data.get("pendant_included") or "").lower() == "no":
+                        for f in ["pendant_height", "pendant_width", "pendant_depth", "pendant_type", "pendant_shape"]:
+                            if f in data:
+                                data[f] = ""
+                elif is_bracelet:
+                    for f in ring_only_fields + necklace_only_fields + earring_only_fields:
+                        if f in data:
+                            data[f] = "" if f not in ["pendant_included", "chain_included"] else "no"
+                elif is_earring:
+                    for f in ring_only_fields + necklace_only_fields + bracelet_only_fields:
+                        if f in data:
+                            data[f] = "" if f not in ["pendant_included", "chain_included"] else "no"
         return super().to_internal_value(data)
 
     @transaction.atomic
