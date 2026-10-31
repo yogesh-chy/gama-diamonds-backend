@@ -168,6 +168,28 @@ class DiamondSpecificationSerializer(serializers.ModelSerializer):
         ]
 
 
+def generate_cloudinary_hls_url(url: str):
+    if not url or "res.cloudinary.com" not in url:
+        return None
+    match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
+    if match:
+        cloud_name, public_path = match.group(1), match.group(2)
+        base_id = public_path.rsplit(".", 1)[0]
+        return f"https://res.cloudinary.com/{cloud_name}/video/upload/sp_auto/{base_id}.m3u8"
+    return None
+
+
+def generate_cloudinary_poster_url(url: str):
+    if not url or "res.cloudinary.com" not in url:
+        return None
+    match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
+    if match:
+        cloud_name, public_path = match.group(1), match.group(2)
+        base_id = public_path.rsplit(".", 1)[0]
+        return f"https://res.cloudinary.com/{cloud_name}/video/upload/so_0,f_auto,q_auto/{base_id}.jpg"
+    return None
+
+
 class ProductListSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
@@ -287,27 +309,11 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     def get_video_hls_url(self, obj):
         url = getattr(obj, "video_url", "") or ""
-        if not url or "res.cloudinary.com" not in url:
-            return None
-        import re
-        match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
-        if match:
-            cloud_name, public_path = match.group(1), match.group(2)
-            base_id = public_path.rsplit(".", 1)[0]
-            return f"https://res.cloudinary.com/{cloud_name}/video/upload/sp_auto/{base_id}.m3u8"
-        return None
+        return generate_cloudinary_hls_url(url)
 
     def get_video_poster_url(self, obj):
         url = getattr(obj, "video_url", "") or ""
-        if not url or "res.cloudinary.com" not in url:
-            return None
-        import re
-        match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
-        if match:
-            cloud_name, public_path = match.group(1), match.group(2)
-            base_id = public_path.rsplit(".", 1)[0]
-            return f"https://res.cloudinary.com/{cloud_name}/video/upload/so_0,f_auto,q_auto/{base_id}.jpg"
-        return None
+        return generate_cloudinary_poster_url(url)
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -560,6 +566,14 @@ class ProductSerializer(serializers.ModelSerializer):
             "totalStock": obj.total_stock if not obj.variants.exists() else sum(v.stock for v in obj.variants.all()),
             "lowStockThreshold": obj.low_stock_threshold,
         }
+
+    def get_video_hls_url(self, obj):
+        url = getattr(obj, "video_url", "") or ""
+        return generate_cloudinary_hls_url(url)
+
+    def get_video_poster_url(self, obj):
+        url = getattr(obj, "video_url", "") or ""
+        return generate_cloudinary_poster_url(url)
 
     def _sync_diamond_spec(self, product, diamond_spec_data):
         if diamond_spec_data is None:
