@@ -640,6 +640,21 @@ class ProductSerializer(serializers.ModelSerializer):
         if variants_data is None:
             return
         
+        # Collect metal-level fallback images across variants (so same metal variants can share images automatically)
+        metal_images_map = {}
+        for var_item in variants_data:
+            m_t = var_item.get("metal_type") or var_item.get("metalType") or product.metal_type
+            m_k = var_item.get("metal_karat") or var_item.get("metalKarat") or product.metal_karat
+            v_imgs = var_item.get("images") or []
+            if m_t and v_imgs:
+                valid_imgs = [img for img in v_imgs if isinstance(img, dict) and img.get("url")]
+                if valid_imgs:
+                    key = f"{m_t}_{m_k}"
+                    if key not in metal_images_map:
+                        metal_images_map[key] = valid_imgs
+                    if m_t not in metal_images_map:
+                        metal_images_map[m_t] = valid_imgs
+
         seen_ids = []
         for idx, var_data in enumerate(variants_data):
             var_data = dict(var_data)
@@ -745,6 +760,11 @@ class ProductSerializer(serializers.ModelSerializer):
                     prod_updates.append("base_price")
                 if prod_updates:
                     product.save(update_fields=prod_updates)
+
+            if not images_data:
+                m_t = defaults.get("metal_type")
+                m_k = defaults.get("metal_karat")
+                images_data = metal_images_map.get(f"{m_t}_{m_k}") or metal_images_map.get(m_t) or []
 
             if isinstance(images_data, list) and len(images_data) > 0:
                 ProductImage.objects.filter(variant=variant).delete()

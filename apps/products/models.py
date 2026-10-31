@@ -349,7 +349,7 @@ class Product(models.Model):
 
     # Shipping & Delivery
     delivery_type = models.CharField(max_length=50, blank=True, default="Standard Secure Shipping")
-    estimated_delivery_time = models.CharField(max_length=100, blank=True, default="3-5 Business Days")
+    estimated_delivery_time = models.CharField(max_length=100, blank=True, default="14-15 Days")
     next_day_delivery_available = models.CharField(max_length=20, choices=AVAILABILITY_CHOICES, default="no")
     made_to_order = models.CharField(max_length=20, choices=AVAILABILITY_CHOICES, default="no")
     production_time = models.CharField(max_length=100, blank=True, default="")
