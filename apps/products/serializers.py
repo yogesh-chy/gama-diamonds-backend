@@ -188,6 +188,9 @@ class ProductListSerializer(serializers.ModelSerializer):
     available = serializers.BooleanField(source="is_available", read_only=True)
     diamondTypeDetail = DiamondTypeSerializer(source="diamond_type", read_only=True)
     brandDetail = BrandSerializer(source="brand", read_only=True)
+    videoUrl = serializers.CharField(source="video_url", read_only=True)
+    video_hls_url = serializers.SerializerMethodField()
+    video_poster_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -233,6 +236,10 @@ class ProductListSerializer(serializers.ModelSerializer):
             "is_active",
             "diamondTypeDetail",
             "brandDetail",
+            "video_url",
+            "videoUrl",
+            "video_hls_url",
+            "video_poster_url",
             "created_at",
         ]
 
@@ -1114,6 +1121,12 @@ class ProductSerializer(serializers.ModelSerializer):
         diamond_spec_data = validated_data.pop("diamond_spec", None)
         if diamond_spec_data is None and self.context.get("request"):
             diamond_spec_data = self.context.get("request").data.get("diamond_spec") or self.context.get("request").data.get("diamondSpec")
+
+        # Safeguard: do not wipe existing video_url with empty string unless remove_video is explicitly set
+        raw_req_data = self.context.get("request").data if self.context.get("request") else {}
+        remove_video = raw_req_data.get("remove_video") is True or raw_req_data.get("removeVideo") is True
+        if "video_url" in validated_data and not validated_data["video_url"] and instance.video_url and not remove_video:
+            validated_data.pop("video_url")
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
