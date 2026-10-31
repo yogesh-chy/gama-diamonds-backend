@@ -1,9 +1,10 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from products.media_views import stream_media_view
 
 def health_check(request):
     return JsonResponse({"status": "ok", "app": "Gama Diamonds API"})
@@ -16,9 +17,6 @@ def root_view(request):
         "admin": "/admin/",
         "health": "/health/"
     })
-
-from django.views.static import serve
-from django.urls import re_path
 
 urlpatterns = [
     path("", root_view, name="api-root"),
@@ -37,7 +35,6 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 
-    # Direct media file serving (handles local disk uploads across dev and prod)
-    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
+    # Direct high-performance media file streaming (HTTP 206 Range streaming + Cache-Control)
+    re_path(r"^media/(?P<path>.*)$", stream_media_view, name="media-stream"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
