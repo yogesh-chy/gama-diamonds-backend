@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "products",
     "orders",
     "payments",
+    "contacts",
 ]
 
 try:
@@ -261,6 +262,7 @@ else:
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Gama Diamonds <no-reply@gamadiamonds.example>")
+ADMIN_NOTIFICATION_EMAIL = env("ADMIN_NOTIFICATION_EMAIL", default="gama.diamond10@gmail.com")
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
