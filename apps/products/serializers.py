@@ -82,6 +82,19 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             "sku": {"validators": []},
         }
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # If this variant has no images directly saved, dynamically inherit from the same metal group
+        if not ret.get("images"):
+            sibling = ProductImage.objects.filter(
+                product=instance.product,
+                variant__metal_type=instance.metal_type,
+                variant__metal_karat=instance.metal_karat,
+            ).exclude(variant=instance).first()
+            if sibling:
+                ret["images"] = [ProductImageSerializer(sibling).data]
+        return ret
+
 
 class ProductSizeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -677,6 +690,7 @@ class ProductSerializer(serializers.ModelSerializer):
                         metal_images_map[m_t] = valid_imgs
 
         seen_ids = []
+        saved_metal_keys = set()
         for idx, var_data in enumerate(variants_data):
             var_data = dict(var_data)
             var_id = var_data.get("id")
@@ -782,29 +796,39 @@ class ProductSerializer(serializers.ModelSerializer):
                 if prod_updates:
                     product.save(update_fields=prod_updates)
 
-            if not images_data:
-                m_t = defaults.get("metal_type")
-                m_k = defaults.get("metal_karat")
-                images_data = metal_images_map.get(f"{m_t}_{m_k}") or metal_images_map.get(m_t) or []
+            # Single image per metal: only the primary variant of each metal group stores ProductImage rows in DB.
+            # Secondary sizes for the same metal share the image dynamically without consuming database storage.
+            metal_key = f"{defaults.get('metal_type')}_{defaults.get('metal_karat')}"
+            is_first_for_metal = metal_key not in saved_metal_keys
 
-            if isinstance(images_data, list) and len(images_data) > 0:
-                ProductImage.objects.filter(variant=variant).delete()
-                for img in images_data:
-                    if isinstance(img, dict) and img.get("url"):
-                        ProductImage.objects.create(
-                            product=product,
-                            variant=variant,
-                            url=img.get("url"),
-                            public_id=img.get("publicId", img.get("public_id", "")),
-                            is_primary=img.get("isPrimary", img.get("is_primary", False)),
-                        )
-                        if not ProductImage.objects.filter(product=product, variant__isnull=True).exists():
+            if is_first_for_metal:
+                if not images_data:
+                    m_t = defaults.get("metal_type")
+                    m_k = defaults.get("metal_karat")
+                    images_data = metal_images_map.get(f"{m_t}_{m_k}") or metal_images_map.get(m_t) or []
+
+                if isinstance(images_data, list) and len(images_data) > 0:
+                    ProductImage.objects.filter(variant=variant).delete()
+                    for img in images_data:
+                        if isinstance(img, dict) and img.get("url"):
                             ProductImage.objects.create(
                                 product=product,
+                                variant=variant,
                                 url=img.get("url"),
                                 public_id=img.get("publicId", img.get("public_id", "")),
-                                is_primary=True,
+                                is_primary=img.get("isPrimary", img.get("is_primary", False)),
                             )
+                            if not ProductImage.objects.filter(product=product, variant__isnull=True).exists():
+                                ProductImage.objects.create(
+                                    product=product,
+                                    url=img.get("url"),
+                                    public_id=img.get("publicId", img.get("public_id", "")),
+                                    is_primary=True,
+                                )
+                    saved_metal_keys.add(metal_key)
+            else:
+                # Secondary sizes do NOT duplicate image rows in DB to optimize storage consumption
+                ProductImage.objects.filter(variant=variant).delete()
 
         if seen_ids:
             product.variants.exclude(id__in=seen_ids).delete()
