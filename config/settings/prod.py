@@ -12,7 +12,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Allowed hosts: can be specified via env (comma-separated), defaults to render/railway domains and localhost
 ALLOWED_HOSTS = env.list(
     "ALLOWED_HOSTS",
-    default=[".onrender.com", ".railway.app", "localhost", "127.0.0.1", "*"]
+    default=[".onrender.com", ".railway.app", "localhost", "127.0.0.1"]
 )
 
 import os
@@ -49,7 +49,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.vercel\.app$",
     r"^http://localhost:\d+$",
 ]
-CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=True)
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 # Ensure CORS origins are also trusted for CSRF
 for origin in CORS_ALLOWED_ORIGINS:

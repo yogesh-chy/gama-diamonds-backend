@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -57,7 +59,7 @@ class RequestOTPView(APIView):
         )
 
 
-ADMIN_EMAILS = {
+DEFAULT_ADMIN_EMAILS = {
     "yogeshchy635@gmail.com",
     "info@gamajewels.com",
     "admin@gamajewels.com",
@@ -66,17 +68,22 @@ ADMIN_EMAILS = {
 }
 
 
+def get_admin_emails() -> set:
+    configured = getattr(settings, "ADMIN_EMAILS", None)
+    if configured:
+        return {str(e).strip().lower() for e in configured if e and "@" in str(e)}
+    return DEFAULT_ADMIN_EMAILS
+
+
 def is_admin_email(email: str) -> bool:
+    """
+    Strictly verifies whether the email is an explicitly authorized administrator.
+    Wildcard matches (e.g. any arbitrary domain starting with admin@) are strictly
+    rejected to prevent privilege escalation vulnerabilities.
+    """
     if not email:
         return False
-    email = email.strip().lower()
-    return (
-        email in ADMIN_EMAILS
-        or email.startswith("admin@")
-        or email.startswith("staff@")
-        or email.endswith("@admin.com")
-        or "@admin." in email
-    )
+    return email.strip().lower() in get_admin_emails()
 
 class VerifyOTPView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -114,6 +121,7 @@ class VerifyOTPView(APIView):
 
 class AdminLoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
 
     def post(self, request):
         email = request.data.get("email", "").strip().lower()

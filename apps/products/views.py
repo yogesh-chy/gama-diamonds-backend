@@ -9,6 +9,7 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from django.db.models import Q
 from core.permissions import IsAdminUser
@@ -24,8 +25,18 @@ from .serializers import (
 )
 
 
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+ALLOWED_VIDEO_EXTS = {".mp4", ".webm", ".mov"}
+ALLOWED_DOC_EXTS = {".pdf", ".dxf", ".stl", ".obj"}
+ALL_ALLOWED_EXTS = ALLOWED_IMAGE_EXTS | ALLOWED_VIDEO_EXTS | ALLOWED_DOC_EXTS
+
+MAX_IMAGE_SIZE = 15 * 1024 * 1024      # 15 MB
+MAX_VIDEO_SIZE = 100 * 1024 * 1024     # 100 MB
+
+
 class MediaUploadView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, format=None):
@@ -33,8 +44,39 @@ class MediaUploadView(APIView):
         if not file_obj:
             return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
-        ext = os.path.splitext(file_obj.name)[1]
-        is_video = ext.lower() in ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.ogv']
+        # 1. Extension validation against strict whitelist
+        raw_name = getattr(file_obj, "name", "") or ""
+        ext = os.path.splitext(raw_name)[1].lower()
+
+        if ext not in ALL_ALLOWED_EXTS:
+            return Response(
+                {"error": f"Unsupported or prohibited file extension '{ext}'. Allowed: images, videos (.mp4, .webm, .mov), and CAD/docs (.pdf, .dxf, .stl, .obj)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        is_video = ext in ALLOWED_VIDEO_EXTS
+
+        # 2. Authorization check: product videos can only be uploaded by authenticated staff
+        if is_video and not (request.user.is_authenticated and (request.user.is_staff or getattr(request.user, "is_superuser", False))):
+            return Response(
+                {"error": "Authentication with staff privileges is required to upload product videos."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 3. File size validation
+        max_size = MAX_VIDEO_SIZE if is_video else MAX_IMAGE_SIZE
+        if file_obj.size > max_size:
+            max_mb = max_size // (1024 * 1024)
+            return Response(
+                {"error": f"File size exceeds the {max_mb}MB limit."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. MIME content-type safety check
+        content_type = getattr(file_obj, "content_type", "") or ""
+        dangerous_mimes = ["text/html", "text/javascript", "application/javascript", "application/x-sh", "application/x-msdownload"]
+        if any(d in content_type.lower() for d in dangerous_mimes):
+            return Response({"error": "Invalid or dangerous file content type."}, status=status.HTTP_400_BAD_REQUEST)
 
         cloud_name = getattr(settings, "CLOUDINARY_CLOUD_NAME", "")
         api_key = getattr(settings, "CLOUDINARY_API_KEY", "")
@@ -90,11 +132,14 @@ class MediaUploadView(APIView):
                     hls_url = f"https://res.cloudinary.com/{cloud}/video/upload/sp_auto/{public_id}.m3u8"
                     poster_url = f"https://res.cloudinary.com/{cloud}/video/upload/so_0,f_auto,q_auto/{public_id}.jpg"
 
+                # Sanitize reported filename
+                safe_filename = os.path.basename(file_obj.name)
+
                 return Response({
                     "success": True,
                     "url": media_url,
                     "public_id": public_id,
-                    "filename": file_obj.name,
+                    "filename": safe_filename,
                     "media_type": "video" if is_video else "image",
                     "hls_url": hls_url,
                     "poster_url": poster_url,
@@ -106,7 +151,8 @@ class MediaUploadView(APIView):
         upload_dir = os.path.join(settings.MEDIA_ROOT, "uploads")
         os.makedirs(upload_dir, exist_ok=True)
 
-        unique_name = f"{uuid.uuid4().hex[:10]}{ext}"
+        # Strictly generate UUID name with validated extension
+        unique_name = f"{uuid.uuid4().hex[:12]}{ext}"
         file_path = os.path.join(upload_dir, unique_name)
 
         with open(file_path, 'wb+') as destination:
@@ -119,10 +165,11 @@ class MediaUploadView(APIView):
             media_path = '/' + media_path
         media_url = request.build_absolute_uri(media_path)
 
+        safe_filename = os.path.basename(file_obj.name)
         return Response({
             "success": True,
             "url": media_url,
-            "filename": file_obj.name,
+            "filename": safe_filename,
             "media_type": "video" if is_video else "image"
         }, status=status.HTTP_201_CREATED)
 

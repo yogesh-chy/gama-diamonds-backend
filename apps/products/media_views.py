@@ -14,15 +14,23 @@ def stream_media_view(request, path):
     media_root = os.path.abspath(str(settings.MEDIA_ROOT))
     full_path = os.path.abspath(os.path.join(media_root, path))
 
-    # Security check: prevent directory traversal attacks
-    if not full_path.startswith(media_root):
+    # Security check: prevent directory traversal attacks using canonical common path
+    try:
+        if os.path.commonpath([media_root, full_path]) != media_root:
+            raise Http404("Media file not found")
+    except ValueError:
         raise Http404("Media file not found")
+
     if not os.path.exists(full_path) or not os.path.isfile(full_path):
         raise Http404("Media file not found")
 
     file_size = os.path.getsize(full_path)
     content_type, _ = mimetypes.guess_type(full_path)
     content_type = content_type or "application/octet-stream"
+
+    # Block execution of active content (HTML, SVG scripts, etc.) if requested via media stream
+    disallow_inline_types = ["text/html", "text/javascript", "application/javascript", "image/svg+xml"]
+    is_active_content = any(content_type.lower().startswith(t) for t in disallow_inline_types)
 
     range_header = request.META.get('HTTP_RANGE', '').strip()
     range_match = None
@@ -76,6 +84,9 @@ def stream_media_view(request, path):
             response['Content-Length'] = str(content_length)
             response['Accept-Ranges'] = 'bytes'
             response['Cache-Control'] = 'public, max-age=31536000, immutable'
+            response['X-Content-Type-Options'] = 'nosniff'
+            if is_active_content:
+                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(full_path)}"'
             return response
         except ValueError:
             pass
@@ -93,5 +104,8 @@ def stream_media_view(request, path):
     response['Content-Length'] = str(file_size)
     response['Accept-Ranges'] = 'bytes'
     response['Cache-Control'] = 'public, max-age=31536000, immutable'
+    response['X-Content-Type-Options'] = 'nosniff'
+    if is_active_content:
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(full_path)}"'
     return response
 

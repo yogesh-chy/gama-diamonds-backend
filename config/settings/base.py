@@ -132,6 +132,18 @@ CLOUDINARY_URL = env("CLOUDINARY_URL", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Whitelist of authorized administrative emails
+ADMIN_EMAILS = env.list(
+    "ADMIN_EMAILS",
+    default=[
+        "yogeshchy635@gmail.com",
+        "info@gamajewels.com",
+        "admin@gamajewels.com",
+        "gamajewels@admin.com",
+        "gama.diamond10@gmail.com",
+    ],
+)
+
 
 # ---------------------------------------------------------------------------
 # Django REST Framework

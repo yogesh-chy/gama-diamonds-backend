@@ -1,6 +1,7 @@
 import logging
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from .models import ContactInquiry
@@ -24,6 +25,7 @@ class ContactInquiryCreateView(APIView):
     Sends instant email alerts to Gama Jewels administration.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
 
     def post(self, request, *args, **kwargs):
         serializer = ContactInquirySerializer(data=request.data)
@@ -57,6 +59,7 @@ class NewsletterSubscribeView(APIView):
     and sends notification alert to admin.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle, UserRateThrottle]
 
     def post(self, request, *args, **kwargs):
         serializer = NewsletterSubscribeSerializer(data=request.data)
