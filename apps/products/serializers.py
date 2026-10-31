@@ -278,6 +278,30 @@ class ProductListSerializer(serializers.ModelSerializer):
             "lowStockThreshold": obj.low_stock_threshold,
         }
 
+    def get_video_hls_url(self, obj):
+        url = getattr(obj, "video_url", "") or ""
+        if not url or "res.cloudinary.com" not in url:
+            return None
+        import re
+        match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
+        if match:
+            cloud_name, public_path = match.group(1), match.group(2)
+            base_id = public_path.rsplit(".", 1)[0]
+            return f"https://res.cloudinary.com/{cloud_name}/video/upload/sp_auto/{base_id}.m3u8"
+        return None
+
+    def get_video_poster_url(self, obj):
+        url = getattr(obj, "video_url", "") or ""
+        if not url or "res.cloudinary.com" not in url:
+            return None
+        import re
+        match = re.search(r"res\.cloudinary\.com/([^/]+)/(?:video|image)/upload/(?:v\d+/)?([^?#]+)", url)
+        if match:
+            cloud_name, public_path = match.group(1), match.group(2)
+            base_id = public_path.rsplit(".", 1)[0]
+            return f"https://res.cloudinary.com/{cloud_name}/video/upload/so_0,f_auto,q_auto/{base_id}.jpg"
+        return None
+
 
 class ProductSerializer(serializers.ModelSerializer):
     category = serializers.CharField(required=False, allow_blank=True)
@@ -321,6 +345,8 @@ class ProductSerializer(serializers.ModelSerializer):
     next_day_delivery_available = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
     made_to_order = serializers.CharField(required=False, default="no", allow_blank=True, allow_null=True)
     videoUrl = serializers.CharField(source="video_url", required=False, allow_blank=True, allow_null=True)
+    video_hls_url = serializers.SerializerMethodField()
+    video_poster_url = serializers.SerializerMethodField()
 
     seoTitle = serializers.CharField(source="seo_title", required=False, allow_blank=True)
     seoDescription = serializers.CharField(source="seo_description", required=False, allow_blank=True)
@@ -470,6 +496,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "occasion",
             "video_url",
             "videoUrl",
+            "video_hls_url",
+            "video_poster_url",
             # SEO
             "seo_title",
             "seoTitle",

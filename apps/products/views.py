@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import os
 import uuid
 import cloudinary
@@ -54,26 +56,51 @@ class MediaUploadView(APIView):
                     )
 
                 resource_type = "video" if is_video else "auto"
+                upload_params = {
+                    "resource_type": resource_type,
+                    "folder": "gama_diamonds",
+                }
+
+                # Cloudinary eager video transformations:
+                # 1. sp_auto adaptive bitrate streaming (HLS .m3u8 manifest)
+                # 2. Optimized responsive MP4 with auto quality & codec
+                if is_video:
+                    upload_params["eager"] = [
+                        {"streaming_profile": "auto", "format": "m3u8"},
+                        {"format": "mp4", "quality": "auto", "video_codec": "auto"}
+                    ]
+                    upload_params["eager_async"] = True
+
                 result = cloudinary.uploader.upload(
                     file_obj,
-                    resource_type=resource_type,
-                    folder="gama_diamonds",
+                    **upload_params
                 )
                 media_url = result.get("secure_url") or result.get("url")
                 res_type = result.get("resource_type", "")
                 if res_type == "video":
                     is_video = True
 
+                public_id = result.get("public_id", "")
+                cloud = cloud_name or getattr(settings, "CLOUDINARY_CLOUD_NAME", "")
+
+                # Derive HLS and Poster URLs for instant consumption
+                hls_url = None
+                poster_url = None
+                if is_video and public_id and cloud:
+                    hls_url = f"https://res.cloudinary.com/{cloud}/video/upload/sp_auto/{public_id}.m3u8"
+                    poster_url = f"https://res.cloudinary.com/{cloud}/video/upload/so_0,f_auto,q_auto/{public_id}.jpg"
+
                 return Response({
                     "success": True,
                     "url": media_url,
-                    "public_id": result.get("public_id", ""),
+                    "public_id": public_id,
                     "filename": file_obj.name,
-                    "media_type": "video" if is_video else "image"
+                    "media_type": "video" if is_video else "image",
+                    "hls_url": hls_url,
+                    "poster_url": poster_url,
                 }, status=status.HTTP_201_CREATED)
             except Exception as e:
-                # Cloudinary failed — fall back to local disk storage
-                pass
+                logger.error("Cloudinary media upload failed: %s", str(e), exc_info=True)
 
         # Fallback: Local disk storage
         upload_dir = os.path.join(settings.MEDIA_ROOT, "uploads")
