@@ -620,10 +620,12 @@ class ProductSerializer(serializers.ModelSerializer):
             if snake_k in valid_fields and v is not None:
                 cleaned_data[snake_k] = v
 
-        if not cleaned_data.get("carat_weight") and cleaned_data.get("total_carat_weight"):
-            cleaned_data["carat_weight"] = cleaned_data["total_carat_weight"]
-        elif not cleaned_data.get("carat_weight"):
-            cleaned_data["carat_weight"] = 1.0
+        carat_val = cleaned_data.get("carat_weight")
+        total_carat_val = cleaned_data.get("total_carat_weight")
+        if (carat_val is None or carat_val == "") and (total_carat_val is not None and total_carat_val != ""):
+            cleaned_data["carat_weight"] = total_carat_val
+        elif carat_val is None or carat_val == "":
+            cleaned_data["carat_weight"] = 0.0 if product.diamond_cut == "plain" else 1.0
 
         try:
             DiamondSpecification.objects.update_or_create(product=product, defaults=cleaned_data)
@@ -634,21 +636,26 @@ class ProductSerializer(serializers.ModelSerializer):
                     setattr(spec, attr, val)
                 spec.save()
 
-        # Always align product.diamond_type from diamond_origin
-        origin = cleaned_data.get("diamond_origin")
-        if origin:
-            target_name = "Natural" if origin == "natural" else "Lab-Grown"
-            dt = DiamondType.objects.filter(name__iexact=target_name).first()
-            if not dt:
-                dt = DiamondType.objects.filter(slug__iexact=slugify(target_name)).first()
-            if not dt:
-                try:
-                    dt = DiamondType.objects.create(name=target_name, slug=slugify(target_name))
-                except Exception:
-                    dt = DiamondType.objects.filter(name__iexact=target_name).first()
-            if dt and product.diamond_type != dt:
-                product.diamond_type = dt
+        # Align product.diamond_type (null for plain, otherwise Natural/Lab-Grown)
+        if product.diamond_cut == "plain":
+            if product.diamond_type is not None:
+                product.diamond_type = None
                 product.save(update_fields=["diamond_type"])
+        else:
+            origin = cleaned_data.get("diamond_origin")
+            if origin:
+                target_name = "Natural" if origin == "natural" else "Lab-Grown"
+                dt = DiamondType.objects.filter(name__iexact=target_name).first()
+                if not dt:
+                    dt = DiamondType.objects.filter(slug__iexact=slugify(target_name)).first()
+                if not dt:
+                    try:
+                        dt = DiamondType.objects.create(name=target_name, slug=slugify(target_name))
+                    except Exception:
+                        dt = DiamondType.objects.filter(name__iexact=target_name).first()
+                if dt and product.diamond_type != dt:
+                    product.diamond_type = dt
+                    product.save(update_fields=["diamond_type"])
 
     def _sync_variants(self, product, variants_data):
         if variants_data is None:

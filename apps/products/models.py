@@ -176,6 +176,7 @@ class Product(models.Model):
         ("marquise", "Marquise"),
         ("asscher", "Asscher"),
         ("heart", "Heart"),
+        ("plain", "Plain / No Diamond"),
     ]
 
     EARRING_TYPE_CHOICES = [
