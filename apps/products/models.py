@@ -389,6 +389,9 @@ class Product(models.Model):
             random_part = uuid.uuid4().hex[:6].upper()
             self.sku = f"GAMA-{prefix}-{random_part}"
 
+        if not self.estimated_delivery_time or "3-5" in str(self.estimated_delivery_time):
+            self.estimated_delivery_time = "14-15 Days"
+
         super().save(*args, **kwargs)
 
     def __str__(self):

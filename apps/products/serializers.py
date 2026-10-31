@@ -315,6 +315,13 @@ class ProductListSerializer(serializers.ModelSerializer):
         url = getattr(obj, "video_url", "") or ""
         return generate_cloudinary_poster_url(url)
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        delivery_time = ret.get("estimated_delivery_time")
+        if not delivery_time or "3-5" in str(delivery_time):
+            ret["estimated_delivery_time"] = "14-15 Days"
+        return ret
+
 
 class ProductSerializer(serializers.ModelSerializer):
     category = serializers.CharField(required=False, allow_blank=True)
@@ -574,6 +581,13 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_video_poster_url(self, obj):
         url = getattr(obj, "video_url", "") or ""
         return generate_cloudinary_poster_url(url)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        delivery_time = ret.get("estimated_delivery_time")
+        if not delivery_time or "3-5" in str(delivery_time):
+            ret["estimated_delivery_time"] = "14-15 Days"
+        return ret
 
     def _sync_diamond_spec(self, product, diamond_spec_data):
         if diamond_spec_data is None:
