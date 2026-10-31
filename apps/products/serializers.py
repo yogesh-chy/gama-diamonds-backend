@@ -333,6 +333,15 @@ class ProductListSerializer(serializers.ModelSerializer):
         delivery_time = ret.get("estimated_delivery_time")
         if not delivery_time or "3-5" in str(delivery_time):
             ret["estimated_delivery_time"] = "14-15 Days"
+        if ret.get("images"):
+            seen = set()
+            deduped = []
+            for img in ret["images"]:
+                u = img.get("url") if isinstance(img, dict) else getattr(img, "url", None)
+                if u and u not in seen:
+                    seen.add(u)
+                    deduped.append(img)
+            ret["images"] = deduped
         return ret
 
 
@@ -600,6 +609,15 @@ class ProductSerializer(serializers.ModelSerializer):
         delivery_time = ret.get("estimated_delivery_time")
         if not delivery_time or "3-5" in str(delivery_time):
             ret["estimated_delivery_time"] = "14-15 Days"
+        if ret.get("images"):
+            seen = set()
+            deduped = []
+            for img in ret["images"]:
+                u = img.get("url") if isinstance(img, dict) else getattr(img, "url", None)
+                if u and u not in seen:
+                    seen.add(u)
+                    deduped.append(img)
+            ret["images"] = deduped
         return ret
 
     def _sync_diamond_spec(self, product, diamond_spec_data):
