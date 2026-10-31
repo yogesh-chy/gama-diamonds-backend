@@ -94,3 +94,4 @@ def stream_media_view(request, path):
     response['Accept-Ranges'] = 'bytes'
     response['Cache-Control'] = 'public, max-age=31536000, immutable'
     return response
+
